@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efx:project name="PiStorm16" description="" last_change_date="Do März 14 2024 13:59:56" location="C:/Efinity/2022.2/project/PiStorm16" sw_version="2022.2.322.4.7" last_run_state="pass" last_run_tool="efx_pgm" last_run_flow="bitstream" config_result_in_sync="true" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
+<efx:project name="PiStorm16" description="" last_change_date="Fr März 15 2024 15:41:47" location="C:/Efinity/2022.2/project/PiStorm16" sw_version="2022.2.322.4.7" last_run_state="pass" last_run_tool="efx_pgm" last_run_flow="bitstream" config_result_in_sync="true" design_ood="sync" place_ood="sync" route_ood="sync" xmlns:efx="http://www.efinixinc.com/enf_proj" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/enf_proj enf_proj.xsd">
     <efx:device_info>
         <efx:family name="Trion"/>
         <efx:device name="T13F256"/>
@@ -65,15 +65,15 @@
         <efx:param name="release_tri_then_reset" value="on" value_type="e_bool"/>
         <efx:param name="four_byte_addressing" value="off" value_type="e_bool"/>
         <efx:param name="generate_bit" value="on" value_type="e_bool"/>
-        <efx:param name="generate_bitbin" value="off" value_type="e_bool"/>
+        <efx:param name="generate_bitbin" value="on" value_type="e_bool"/>
         <efx:param name="generate_hex" value="on" value_type="e_bool"/>
-        <efx:param name="generate_hexbin" value="off" value_type="e_bool"/>
+        <efx:param name="generate_hexbin" value="on" value_type="e_bool"/>
         <efx:param name="cold_boot" value="off" value_type="e_bool"/>
         <efx:param name="cascade" value="off" value_type="e_option"/>
     </efx:bitstream_generation>
     <efx:debugger>
         <efx:param name="work_dir" value="work_dbg" value_type="e_string"/>
         <efx:param name="auto_instantiation" value="off" value_type="e_bool"/>
-        <efx:param name="profile" value="NONE" value_type="e_string"/>
+        <efx:param name="profile" value="debug_profile.wizard.json" value_type="e_string"/>
     </efx:debugger>
 </efx:project>

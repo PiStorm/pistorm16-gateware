@@ -45,7 +45,6 @@ module PiStorm16(
     output nHALT_OE,
     
     input nRESET_IN,
-    output nRESET_OUT,
     output nRESET_OE,
     
     input nVPA,
@@ -75,7 +74,9 @@ module PiStorm16(
     output [8:1] TP_OE,
     
     // PLL
-    input SYS_PLL_CLKOUT0
+    input SYS_PLL_CLKOUT0,
+    input IN_CLK_50M,
+    input SYS_PLL_LOCKED
 );
 
 assign DBG_DAT = PI_GPIO_IN[5];
@@ -98,6 +99,8 @@ assign A_OE = {23{A_DRIVE}};
 
 assign TP_OE = 8'b0;
 
+reg RESET_DRIVE = 0;
+
 // Disable all outputs for now
 assign nVMA_OE = 0;
 assign nRESET_OE = 0;
@@ -109,6 +112,17 @@ assign nUDS_OE = 0;
 assign nLDS_OE = 0;
 assign nAS_OE = 0;
 assign RnW_OE = 0;
+
+reg[31:0] counter;
+
+always @(posedge SYS_CLK) begin
+    if (counter < 32'd7000000) begin
+        counter <= counter + 32'd1;
+    end else begin 
+        RESET_DRIVE <= ~RESET_DRIVE;
+        counter <= 0;
+    end
+end
 
 // Synchronize clk_rising/clk_falling with MC_CLK.
 (* async_reg = "true" *) reg [1:0] mc_clk_sync;
