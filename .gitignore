@@ -7,3 +7,4 @@ work_syn/
 *.vdb
 *.log
 *TEMPLATE*.*
+.vscode/
