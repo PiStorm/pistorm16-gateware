@@ -13,6 +13,11 @@ module PiStorm16(
     output wire [15:0] D_OUT,
     output wire [15:0] D_OE,
     
+    // EXT port
+    input wire [7:2] EXT_IN,
+    output wire [7:2] EXT_OUT,
+    output wire [7:2] EXT_OE,
+    
     // Read/Write
     output wire RnW_OUT,
     output wire RnW_OE,
@@ -68,6 +73,14 @@ module PiStorm16(
     input wire [8:1] TP_IN,
     output wire [8:1] TP_OUT,
     output wire [8:1] TP_OE,
+    
+    input wire TP19_IN,
+    output wire TP19_OUT,
+    output wire TP19_OE,
+    
+    input wire TP20_IN,
+    output wire TP20_OUT,
+    output wire TP20_OE,
     
     // PLL
     input wire SYS_PLL_CLKOUT0,
