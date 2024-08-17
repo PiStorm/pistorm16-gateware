@@ -3,6 +3,7 @@
 module PiStorm16(
     // Amiga clock
     input wire CLK_7M,
+    output wire ECLK,
     
     // Amiga address bus
     output wire [23:1] A_OUT,
@@ -81,11 +82,17 @@ module PiStorm16(
     input wire TP20_IN,
     output wire TP20_OUT,
     output wire TP20_OE,
-    
+        
     // PLL
     input wire SYS_PLL_CLKOUT0,
     input wire IN_CLK_50M,
     input wire SYS_PLL_LOCKED
+);
+
+// EClock generator
+EClock eclock(
+    .CLOCK_IN(CLK_7M),
+    .ECLOCK_OUT(ECLK)
 );
 
 // System clock comes from PLL
@@ -174,6 +181,8 @@ assign A_OE = {23{r_abus_drive}};
 
 // Test pads
 assign TP_OE = 8'b0;
+assign TP19_OE = 0;
+assign TP20_OE = 0;
 
 reg r_reset_drive;
 reg r_halt_drive;
@@ -183,7 +192,8 @@ reg r_as_drive;
 reg r_vma_drive;
 reg r_bgack_drive;
 reg r_rw_drive;
-reg r_ds_drive;
+reg r_lds_drive;
+reg r_uds_drive;
 
 // Disable all outputs for now
 assign nVMA_OE = r_vma_drive;
@@ -192,8 +202,8 @@ assign nHALT_OE = r_halt_drive;
 assign nBGACK_OE = r_bgack_drive;
 assign nBR_OE = r_br_drive;
 assign nBG_OE = r_bg_drive;
-assign nUDS_OE = r_ds_drive;
-assign nLDS_OE = r_ds_drive;
+assign nUDS_OE = r_uds_drive;
+assign nLDS_OE = r_lds_drive;
 assign nAS_OE = r_as_drive;
 assign RnW_OE = r_rw_drive;
 

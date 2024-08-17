@@ -13,6 +13,8 @@
 #################
 create_clock -period 5.5556 SYS_PLL_CLKOUT0
 create_clock -period 140 CLK_7M
+create_clock -period 1400 ECLK
+create_clock -period 20 IN_CLK_50M
 
 # GPIO Constraints
 ####################
