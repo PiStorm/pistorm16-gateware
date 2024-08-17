@@ -184,9 +184,12 @@ assign TP_OE = 8'b0;
 assign TP19_OE = 0;
 assign TP20_OE = 0;
 
-reg r_reset_drive;
-reg r_halt_drive;
-reg r_br_drive;
+// Pi control register.
+reg [14:0] pi_control = 14'b00000000000000;
+wire r_br_drive = pi_control[0];
+wire r_reset_drive = pi_control[1];
+wire r_halt_drive = pi_control[2];
+
 reg r_bg_drive;
 reg r_as_drive;
 reg r_vma_drive;
@@ -266,6 +269,71 @@ always @(*) begin
         PI_REG_STATUS: pi_data_out <= pi_status;
         PI_REG_VERSION: pi_data_out <= firmware_version;
         default: pi_data_out <= 16'bx;
+    endcase
+end
+
+// Synchronize WR command from Pi
+(* async_reg = "true" *) reg [1:0] pi_wr_sync;
+wire pi_wr_falling = (pi_wr_sync == 2'b10);
+
+always @(posedge sys_clk) begin
+    pi_wr_sync <= { pi_wr_sync[0], PI_WR };
+end
+
+// ## Access state machine.
+localparam [3:0] STATE_WAIT_ACTIVE_REQUEST = 4'd0;
+localparam [3:0] STATE_WAIT_BUS_CYCLE_START = 4'd1;
+localparam [3:0] STATE_WAIT_ASSERT_AS = 4'd2;
+localparam [3:0] STATE_WAIT_OPEN_DATA_LATCH = 4'd3;
+localparam [3:0] STATE_WAIT_TERMINATION = 4'd4;
+localparam [3:0] STATE_WAIT_LATCH_DATA = 4'd5;
+localparam [3:0] STATE_UPDATE_DATA_READ = 4'd6;
+localparam [3:0] STATE_MAYBE_TERMINATE_ACCESS = 4'd7;
+localparam [3:0] STATE_RESET = 4'd15;
+
+reg [3:0] state;
+reg [6:0] reset_delay;
+
+// Main state machine
+always @(posedge sys_clk) begin
+    if (pi_wr_falling) begin
+        case (PI_A)
+            PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
+            PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
+            PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
+            PI_REG_ADDR_HI: begin
+                req_address[23:16] <= pi_data_in[7:0];
+                req_size <= pi_data_in[9:8];
+                req_rw <= pi_data_in[10];
+                req_fc <= pi_data_in[13:11];
+                req_active <= 1'b1;
+            end
+            PI_REG_CONTROL: begin
+                if (pi_data_in[15]) begin
+                    pi_control <= pi_control | pi_data_in[14:0];
+                    if (pi_data_in[1] == 'b1) begin
+                        req_active <= 1'b1;
+                        state <= STATE_RESET;
+                        reset_delay <= 7'd0;
+                    end
+                end else
+                    pi_control <= pi_control & ~pi_data_in[14:0];
+            end
+        endcase
+    end
+    
+    case (state)
+        STATE_RESET: begin
+            if (mc_clk_rising) begin
+                if (reset_delay == 7'd124) begin
+                    state <= STATE_WAIT_ACTIVE_REQUEST;
+                    pi_control[1] <= 1'b0;
+                    req_active <= 1'b0;
+                end
+                else
+                    reset_delay <= reset_delay + 7'd1;
+            end
+        end
     endcase
 end
 
