@@ -291,23 +291,23 @@ always @(posedge sys_clk) begin
 end
 
 // ## Access state machine.
-localparam [3:0] STATE_WAIT_ACTIVE_REQUEST = 4'd0;
-localparam [3:0] STATE_SET_ADDRESS_BUS = 4'd1;
-localparam [3:0] STATE_WAIT_ASSERT_AS = 4'd2;
-localparam [3:0] STATE_DRIVE_DATA_IF_WRITE = 4'd3;
-localparam [3:0] STATE_WAIT_TERMINATION = 4'd4;
-localparam [3:0] STATE_WAIT_LATCH_DATA = 4'd5;
-localparam [3:0] STATE_UPDATE_DATA_READ = 4'd6;
-localparam [3:0] STATE_TERMINATE = 4'd7;
+localparam [2:0] STATE_WAIT_ACTIVE_REQUEST = 4'd0;
+localparam [2:0] STATE_SET_ADDRESS_BUS = 4'd1;
+localparam [2:0] STATE_WAIT_ASSERT_AS = 4'd2;
+localparam [2:0] STATE_DRIVE_DATA_IF_WRITE = 4'd3;
+localparam [2:0] STATE_WAIT_TERMINATION = 4'd4;
+localparam [2:0] STATE_WAIT_LATCH_DATA = 4'd5;
+localparam [2:0] STATE_UPDATE_DATA_READ = 4'd6;
+localparam [2:0] STATE_TERMINATE = 4'd7;
 
 /*
 localparam [3:0] STATE_WAIT_OPEN_DATA_LATCH = 4'd3;
 localparam [3:0] STATE_MAYBE_TERMINATE_ACCESS = 4'd7;
 */
 
-localparam [3:0] STATE_RESET = 4'd15;
+//localparam [3:0] STATE_RESET = 4'd15;
 
-reg [3:0] state = STATE_WAIT_ACTIVE_REQUEST;
+reg [2:0] state = STATE_WAIT_ACTIVE_REQUEST;
 reg [6:0] reset_delay;
 
 // Main state machine
@@ -327,12 +327,7 @@ always @(posedge sys_clk) begin
             end
             PI_REG_CONTROL: begin
                 if (pi_data_in[15]) begin
-                    pi_control <= pi_control | pi_data_in[14:0];
-                    if (pi_data_in[1] == 'b1) begin
-                        req_active <= 1'b1;
-                        state <= STATE_RESET;
-                        reset_delay <= 7'd0;
-                    end
+                    pi_control <= pi_control | pi_data_in[14:0];                    
                 end else
                     pi_control <= pi_control & ~pi_data_in[14:0];
             end
@@ -340,27 +335,11 @@ always @(posedge sys_clk) begin
     end
     
     case (state)
-        STATE_RESET: begin
-            if (mc_clk_rising) begin
-                if (reset_delay == 7'd124) begin
-                    state <= STATE_WAIT_ACTIVE_REQUEST;
-                    pi_control[1] <= 1'b0;
-                    req_active <= 1'b0;
-                end
-                else
-                    reset_delay <= reset_delay + 7'd1;
-            end
-        end
-        
         STATE_WAIT_ACTIVE_REQUEST: // S0
-        begin 
-            data_valid <= 1'b0;
-            r_rw_drive <= 1'b0;
-            r_vma_drive <= 1'b0;
-            r_lds_drive <= 1'b0;
-            r_uds_drive <= 1'b0;
-            
+        begin             
             if (mc_clk_rising) begin           
+                r_rw_drive <= 1'b0;
+                r_vma_drive <= 1'b0;
                 if (req_active) begin
                     r_fc_drive <= 1'b1;
                     state <= STATE_SET_ADDRESS_BUS;
@@ -434,7 +413,7 @@ always @(posedge sys_clk) begin
         
         STATE_TERMINATE: // S7
         begin
-            if (req_read) data_valid <= 1'b1;
+            //if (req_read) data_valid <= 1'b1;
             
             if (mc_clk_rising) begin
                 r_abus_drive <= 1'b0;
