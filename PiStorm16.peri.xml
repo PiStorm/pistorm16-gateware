@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<efxpt:design_db name="PiStorm16" device_def="T13F256" location="C:\Efinity\2023.2\project\PiStorm16" version="2023.2.307.2.17" db_version="20232999" last_change_date="Thu Aug 15 22:20:07 2024" xmlns:efxpt="http://www.efinixinc.com/peri_design_db" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/peri_design_db peri_design_db.xsd ">
+<efxpt:design_db name="PiStorm16" device_def="T13F256" location="C:\Efinity\2023.2\project\PiStorm16" version="2023.2.307.2.17" db_version="20232999" last_change_date="Fri Aug 30 20:49:25 2024" xmlns:efxpt="http://www.efinixinc.com/peri_design_db" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.efinixinc.com/peri_design_db peri_design_db.xsd ">
     <efxpt:device_info>
         <efxpt:iobank_info>
             <efxpt:iobank name="1A" iostd="3.3 V LVTTL / LVCMOS"/>
@@ -424,7 +424,7 @@
         </efxpt:gpio>
         <efxpt:gpio name="RnW" gpio_def="GPIOR_121" mode="inout" bus_name="" is_lvds_gpio="false" io_standard="3.3 V LVTTL / LVCMOS">
             <efxpt:input_config name="RnW_IN" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pullup" is_schmitt_trigger="true" ddio_type="none"/>
-            <efxpt:output_config name="RnW_OUT" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="true" tied_option="none" ddio_type="none" drive_strength="4"/>
+            <efxpt:output_config name="RnW_OUT" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="true" tied_option="__gnd__" ddio_type="none" drive_strength="4"/>
             <efxpt:output_enable_config name="RnW_OE" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
         <efxpt:gpio name="TP19" gpio_def="GPIOB_RXP09" mode="inout" bus_name="" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
@@ -432,15 +432,15 @@
             <efxpt:output_config name="TP19_OUT" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
             <efxpt:output_enable_config name="TP19_OE" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
-        <efxpt:gpio name="TP[1]" gpio_def="GPIOB_RXP00" mode="inout" bus_name="TP" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
-            <efxpt:input_config name="TP_IN[1]" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pullup" is_schmitt_trigger="false" ddio_type="none"/>
-            <efxpt:output_config name="TP_OUT[1]" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
-            <efxpt:output_enable_config name="TP_OE[1]" is_register="false" clock_name="" is_clock_inverted="false"/>
-        </efxpt:gpio>
         <efxpt:gpio name="TP20" gpio_def="GPIOB_RXP11" mode="inout" bus_name="" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
             <efxpt:input_config name="TP20_IN" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pullup" is_schmitt_trigger="false" ddio_type="none"/>
             <efxpt:output_config name="TP20_OUT" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
             <efxpt:output_enable_config name="TP20_OE" is_register="false" clock_name="" is_clock_inverted="false"/>
+        </efxpt:gpio>
+        <efxpt:gpio name="TP[1]" gpio_def="GPIOB_RXP00" mode="inout" bus_name="TP" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
+            <efxpt:input_config name="TP_IN[1]" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pullup" is_schmitt_trigger="false" ddio_type="none"/>
+            <efxpt:output_config name="TP_OUT[1]" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="false" tied_option="none" ddio_type="none" drive_strength="1"/>
+            <efxpt:output_enable_config name="TP_OE[1]" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
         <efxpt:gpio name="TP[2]" gpio_def="GPIOB_RXP03" mode="inout" bus_name="TP" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
             <efxpt:input_config name="TP_IN[2]" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pullup" is_schmitt_trigger="false" ddio_type="none"/>
@@ -510,7 +510,7 @@
         </efxpt:gpio>
         <efxpt:gpio name="nLDS" gpio_def="GPIOR_88" mode="inout" bus_name="" is_lvds_gpio="false" io_standard="3.3 V LVTTL / LVCMOS">
             <efxpt:input_config name="nLDS_IN" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pullup" is_schmitt_trigger="true" ddio_type="none"/>
-            <efxpt:output_config name="nLDS_OUT" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="true" tied_option="none" ddio_type="none" drive_strength="4"/>
+            <efxpt:output_config name="nLDS_OUT" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="true" tied_option="__gnd__" ddio_type="none" drive_strength="4"/>
             <efxpt:output_enable_config name="nLDS_OE" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
         <efxpt:gpio name="nRESET" gpio_def="GPIOB_TXN00" mode="inout" bus_name="" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
@@ -520,7 +520,7 @@
         </efxpt:gpio>
         <efxpt:gpio name="nUDS" gpio_def="GPIOR_111" mode="inout" bus_name="" is_lvds_gpio="false" io_standard="3.3 V LVTTL / LVCMOS">
             <efxpt:input_config name="nUDS_IN" name_ddio_lo="" conn_type="normal" is_register="false" clock_name="" is_clock_inverted="false" pull_option="weak pullup" is_schmitt_trigger="true" ddio_type="none"/>
-            <efxpt:output_config name="nUDS_OUT" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="true" tied_option="none" ddio_type="none" drive_strength="4"/>
+            <efxpt:output_config name="nUDS_OUT" name_ddio_lo="" register_option="none" clock_name="" is_clock_inverted="false" is_slew_rate="true" tied_option="__gnd__" ddio_type="none" drive_strength="4"/>
             <efxpt:output_enable_config name="nUDS_OE" is_register="false" clock_name="" is_clock_inverted="false"/>
         </efxpt:gpio>
         <efxpt:gpio name="nVMA" gpio_def="GPIOB_TXP03" mode="inout" bus_name="" is_lvds_gpio="true" io_standard="3.3 V LVTTL / LVCMOS">
@@ -541,8 +541,8 @@
         <efxpt:bus name="EXT" mode="inout" msb="7" lsb="2"/>
     </efxpt:gpio_info>
     <efxpt:pll_info>
-        <efxpt:pll name="SYS_PLL" pll_def="PLL_TR0" ref_clock_name="" ref_clock_freq="50.0000" multiplier="144" pre_divider="5" post_divider="2" reset_name="" locked_name="SYS_PLL_LOCKED" is_ipfrz="false" is_bypass_lock="true">
-            <efxpt:output_clock name="SYS_PLL_CLKOUT0" number="0" out_divider="6" adv_out_phase_shift="0"/>
+        <efxpt:pll name="SYS_PLL" pll_def="PLL_TR0" ref_clock_name="" ref_clock_freq="50.0000" multiplier="132" pre_divider="5" post_divider="2" reset_name="" locked_name="SYS_PLL_LOCKED" is_ipfrz="false" is_bypass_lock="true">
+            <efxpt:output_clock name="SYS_PLL_CLKOUT0" number="0" out_divider="10" adv_out_phase_shift="0"/>
             <efxpt:adv_prop ref_clock_mode="external" ref_clock1_name="" ext_ref_clock_id="2" clksel_name="" feedback_clock_name="" feedback_mode="internal"/>
         </efxpt:pll>
     </efxpt:pll_info>

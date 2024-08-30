@@ -20,16 +20,13 @@ module PiStorm16(
     output wire [7:2] EXT_OE,
     
     // Read/Write
-    output wire RnW_OUT,
     output wire RnW_OE,
     
     // Address strobe
     output wire nAS_OE,
     
     // Lower/Upper byte on D active
-    output wire nLDS_OUT,
     output wire nLDS_OE,
-    output wire nUDS_OUT,
     output wire nUDS_OE,
     
     input wire nDTACK,
@@ -123,12 +120,17 @@ end
 (* async_reg = "true" *) reg halt_sync;
 (* async_reg = "true" *) reg dtack_sync;
 (* async_reg = "true" *) reg berr_n_sync;
+(* async_reg = "true" *) reg [15:0] din_sync;
 
 always @(posedge sys_clk) begin
     reset_sync <= nRESET_IN;
     halt_sync <= nHALT_IN;
     dtack_sync <= nDTACK;
     berr_n_sync <= nBERR;
+end
+
+always @(negedge sys_clk) begin
+    din_sync <= D_IN;
 end
 
 // Wire IPL line as inputs from 68k bus to PI
@@ -220,9 +222,11 @@ always @(negedge sys_clk) begin
     mc_clk_sync <= {mc_clk_sync[0], CLK_7M};
 end
 
+
 // Phase counter clocks sys_clk pulses since rising edge of 7.14MHz MC CLK
 // At 200MHz clock it could count up to 28 (28 * 7.14), so make sure it is large
 // enough
+/*
 (* syn_keep = "true" *) reg [4:0] phase_counter;
 
 always @(posedge sys_clk) begin
@@ -231,7 +235,7 @@ always @(posedge sys_clk) begin
     else
         phase_counter <= phase_counter + 4'd1;
 end
-
+*/
 
 // ## Pi interface.
 localparam [2:0] PI_REG_DATA_LO = 3'd0;
@@ -249,10 +253,11 @@ localparam [2:0] FW_TYPE_PS16 = 3'd2;
 localparam [4:0] FW_EXT_DATA = 5'd0;
 
 wire [15:0] firmware_version = { FW_MAJOR, FW_MINOR, FW_TYPE_PS16, FW_EXT_DATA };
-wire [15:0] pi_status = {8'd0, req_active, req_terminated_normally, ipl, halt_sync, reset_sync, is_bm};
+wire [15:0] pi_status = {7'd0, data_valid, req_active, req_terminated_normally, ipl, halt_sync, reset_sync, is_bm};
 
 reg [2:0] req_fc;
-reg req_rw;
+reg req_read;
+reg data_valid;
 reg [1:0] req_size;
 reg req_terminated_normally;
 reg is_bm;
@@ -260,12 +265,16 @@ reg [31:0] req_data_read;
 reg [31:0] req_data_write;
 reg [23:0] req_address;
 
+assign D_OUT = req_data_write[15:0];
+assign A_OUT = req_address[23:1];
+assign FC_OUT = req_fc;
+
 always @(*) begin
     case (PI_A)
         PI_REG_DATA_LO: pi_data_out <= req_data_read[15:0];
         PI_REG_DATA_HI: pi_data_out <= req_data_read[31:16];
         PI_REG_ADDR_LO: pi_data_out <= req_address[15:0];
-        PI_REG_ADDR_HI: pi_data_out <= {2'd0, req_fc, req_rw, req_size, req_address[23:16]};
+        PI_REG_ADDR_HI: pi_data_out <= {2'd0, req_fc, req_read, req_size, req_address[23:16]};
         PI_REG_STATUS: pi_data_out <= pi_status;
         PI_REG_VERSION: pi_data_out <= firmware_version;
         default: pi_data_out <= 16'bx;
@@ -282,16 +291,22 @@ end
 
 // ## Access state machine.
 localparam [3:0] STATE_WAIT_ACTIVE_REQUEST = 4'd0;
-localparam [3:0] STATE_WAIT_BUS_CYCLE_START = 4'd1;
+localparam [3:0] STATE_SET_ADDRESS_BUS = 4'd1;
 localparam [3:0] STATE_WAIT_ASSERT_AS = 4'd2;
-localparam [3:0] STATE_WAIT_OPEN_DATA_LATCH = 4'd3;
+localparam [3:0] STATE_DRIVE_DATA_IF_WRITE = 4'd3;
 localparam [3:0] STATE_WAIT_TERMINATION = 4'd4;
 localparam [3:0] STATE_WAIT_LATCH_DATA = 4'd5;
 localparam [3:0] STATE_UPDATE_DATA_READ = 4'd6;
+localparam [3:0] STATE_TERMINATE = 4'd7;
+
+/*
+localparam [3:0] STATE_WAIT_OPEN_DATA_LATCH = 4'd3;
 localparam [3:0] STATE_MAYBE_TERMINATE_ACCESS = 4'd7;
+*/
+
 localparam [3:0] STATE_RESET = 4'd15;
 
-reg [3:0] state;
+reg [3:0] state = STATE_WAIT_ACTIVE_REQUEST;
 reg [6:0] reset_delay;
 
 // Main state machine
@@ -304,9 +319,10 @@ always @(posedge sys_clk) begin
             PI_REG_ADDR_HI: begin
                 req_address[23:16] <= pi_data_in[7:0];
                 req_size <= pi_data_in[9:8];
-                req_rw <= pi_data_in[10];
+                req_read <= pi_data_in[10];
                 req_fc <= pi_data_in[13:11];
                 req_active <= 1'b1;
+                data_valid <= 1'b0;
             end
             PI_REG_CONTROL: begin
                 if (pi_data_in[15]) begin
@@ -332,6 +348,96 @@ always @(posedge sys_clk) begin
                 end
                 else
                     reset_delay <= reset_delay + 7'd1;
+            end
+        end
+        
+        STATE_WAIT_ACTIVE_REQUEST: // S0
+        begin 
+            data_valid <= 1'b0;
+            r_rw_drive <= 1'b0;
+            r_vma_drive <= 1'b0;
+            r_lds_drive <= 1'b0;
+            r_uds_drive <= 1'b0;
+            
+            if (req_active) begin
+                r_fc_drive <= 1'b1;
+                state <= STATE_SET_ADDRESS_BUS;
+            end else begin
+                r_fc_drive <= 1'b0;
+            end
+        end
+        
+        STATE_SET_ADDRESS_BUS: // S1
+        begin
+            // On falling mc clk edge (begin of S1 state), start driving address bus
+            if (mc_clk_falling) begin
+                r_abus_drive <= 1'b1;
+                state <= STATE_WAIT_ASSERT_AS;
+            end
+        end
+        
+        STATE_WAIT_ASSERT_AS: // S2
+        begin
+            if (mc_clk_rising) begin
+                // Assert address strobe
+                r_as_drive <= 1'b1;
+                // Drive RW low (for write) or high (for read)
+                r_rw_drive <= req_read;
+                // When entering S2 in read mode, drive LDS/UDS
+                if (req_read) begin
+                    r_lds_drive <= (req_size == 'd1) || (req_address[0] == 1'b1);
+                    r_uds_drive <= (req_size == 'd1) || (req_address[0] == 1'b0);
+                end
+                state <= STATE_DRIVE_DATA_IF_WRITE;
+            end
+        end
+        
+        STATE_DRIVE_DATA_IF_WRITE: // S3
+        begin
+            if (mc_clk_falling) begin
+                if (!req_read)
+                    r_dbus_drive <= 1'b1;
+                state <= STATE_WAIT_TERMINATION;
+            end
+        end
+        
+        STATE_WAIT_TERMINATION: // S4
+        begin
+            // When entering S4 in write mode, drive LDS/UDS
+            if (mc_clk_rising && !req_read) begin
+                r_lds_drive <= (req_size == 'd1) || (req_address[0] == 1'b1);
+                r_uds_drive <= (req_size == 'd1) || (req_address[0] == 1'b0);
+            end
+            // Allthough S4 state, sample DTACK on falling edge
+            if (mc_clk_falling) begin
+                if (dtack_sync == 1'b0) begin
+                    state <= STATE_WAIT_LATCH_DATA;
+                end
+            end
+        end
+        
+        STATE_WAIT_LATCH_DATA: // S5-S6
+        begin
+            // S5 cycle does nothing, S6 is for devices to put data on the bus
+            // during transition from S6 to S7 data is sampled
+            if (mc_clk_falling) begin
+                if (req_read) req_data_read <= din_sync;
+                r_as_drive <= 1'b0;
+                r_lds_drive <= 1'b0;
+                r_uds_drive <= 1'b0;
+                state <= STATE_TERMINATE;
+            end
+        end
+        
+        STATE_TERMINATE: // S7
+        begin
+            if (req_read) data_valid <= 1'b1;
+            
+            if (mc_clk_rising) begin
+                r_abus_drive <= 1'b0;
+                r_dbus_drive <= 1'b0;
+                req_active <= 1'b0;
+                state <= STATE_WAIT_ACTIVE_REQUEST;
             end
         end
     endcase
