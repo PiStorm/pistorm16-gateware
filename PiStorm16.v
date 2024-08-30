@@ -123,14 +123,14 @@ end
 (* async_reg = "true" *) reg [15:0] din_sync;
 
 always @(posedge sys_clk) begin
-    reset_sync <= nRESET_IN;
-    halt_sync <= nHALT_IN;
-    dtack_sync <= nDTACK;
-    berr_n_sync <= nBERR;
-end
-
-always @(negedge sys_clk) begin
-    din_sync <= D_IN;
+    if (mc_clk_falling) begin
+        reset_sync <= nRESET_IN;
+        halt_sync <= nHALT_IN;
+        dtack_sync <= nDTACK;
+        berr_n_sync <= nBERR;
+        is_bm <= nBG_IN;
+        din_sync <= D_IN;
+    end
 end
 
 // Wire IPL line as inputs from 68k bus to PI
@@ -284,6 +284,7 @@ end
 // Synchronize WR command from Pi
 (* async_reg = "true" *) reg [1:0] pi_wr_sync;
 wire pi_wr_falling = (pi_wr_sync == 2'b10);
+wire pi_wr_rising = (pi_wr_sync == 2'b10);
 
 always @(posedge sys_clk) begin
     pi_wr_sync <= { pi_wr_sync[0], PI_WR };
@@ -359,11 +360,13 @@ always @(posedge sys_clk) begin
             r_lds_drive <= 1'b0;
             r_uds_drive <= 1'b0;
             
-            if (req_active) begin
-                r_fc_drive <= 1'b1;
-                state <= STATE_SET_ADDRESS_BUS;
-            end else begin
-                r_fc_drive <= 1'b0;
+            if (mc_clk_rising) begin           
+                if (req_active) begin
+                    r_fc_drive <= 1'b1;
+                    state <= STATE_SET_ADDRESS_BUS;
+                end else begin
+                    r_fc_drive <= 1'b0;
+                end
             end
         end
         
