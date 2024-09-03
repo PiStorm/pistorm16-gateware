@@ -215,13 +215,39 @@ assign RnW_OE = r_rw_drive;
 // Synchronize clk_rising/clk_falling with MC_CLK.
 (* async_reg = "true" *) reg [1:0] mc_clk_sync;
 
+//wire mc_clk_rising = (mc_clk_sync == 2'b01);
+//wire mc_clk_falling = (mc_clk_sync == 2'b10);
+reg mc_clk_rising;
+reg mc_clk_falling;
+
+always @(negedge sys_clk) begin
+    mc_clk_sync <= {mc_clk_sync[0], CLK_7M};
+    
+    if (mc_clk_sync == 2'b01)
+        mc_clk_rising <= 1'b1;
+    else
+        mc_clk_rising <= 1'b0;
+        
+    if (mc_clk_sync == 2'b10)
+        mc_clk_falling <= 1'b1;
+    else
+        mc_clk_falling <= 1'b0;   
+end
+
+reg mc_clk_possync;
+
+always @(posedge sys_clk) begin
+    mc_clk_possync <= CLK_7M;
+end
+
+/*
 wire mc_clk_rising = (mc_clk_sync == 2'b01);
 wire mc_clk_falling = (mc_clk_sync == 2'b10);
 
 always @(negedge sys_clk) begin
     mc_clk_sync <= {mc_clk_sync[0], CLK_7M};
 end
-
+*/
 
 // Phase counter clocks sys_clk pulses since rising edge of 7.14MHz MC CLK
 // At 200MHz clock it could count up to 28 (28 * 7.14), so make sure it is large
@@ -281,6 +307,13 @@ always @(*) begin
     endcase
 end
 
+always @(*) begin
+    case (state)
+        STATE_TERMINATE: data_valid <= 1'b1;
+        default: data_valid <= 1'b0;
+    endcase
+end
+
 // Synchronize WR command from Pi
 (* async_reg = "true" *) reg [1:0] pi_wr_sync;
 wire pi_wr_falling = (pi_wr_sync == 2'b10);
@@ -323,7 +356,6 @@ always @(posedge sys_clk) begin
                 req_read <= pi_data_in[10];
                 req_fc <= pi_data_in[13:11];
                 req_active <= 1'b1;
-                data_valid <= 1'b0;
             end
             PI_REG_CONTROL: begin
                 if (pi_data_in[15]) begin
@@ -340,12 +372,9 @@ always @(posedge sys_clk) begin
             if (mc_clk_rising) begin           
                 r_rw_drive <= 1'b0;
                 r_vma_drive <= 1'b0;
-                if (req_active) begin
-                    r_fc_drive <= 1'b1;
-                    state <= STATE_SET_ADDRESS_BUS;
-                end else begin
-                    r_fc_drive <= 1'b0;
-                end
+                r_fc_drive <= req_active;
+                
+                state <= STATE_SET_ADDRESS_BUS & {3{req_active}};
             end
         end
         
@@ -364,12 +393,11 @@ always @(posedge sys_clk) begin
                 // Assert address strobe
                 r_as_drive <= 1'b1;
                 // Drive RW low (for write) or high (for read)
-                r_rw_drive <= req_read;
+                r_rw_drive <= !req_read;
                 // When entering S2 in read mode, drive LDS/UDS
-                if (req_read) begin
-                    r_lds_drive <= (req_size == 'd1) || (req_address[0] == 1'b1);
-                    r_uds_drive <= (req_size == 'd1) || (req_address[0] == 1'b0);
-                end
+                r_lds_drive <= (req_read) && ((req_size == 'd1) || (req_address[0] == 1'b1));
+                r_uds_drive <= (req_read) && ((req_size == 'd1) || (req_address[0] == 1'b0));
+
                 state <= STATE_DRIVE_DATA_IF_WRITE;
             end
         end
@@ -386,12 +414,12 @@ always @(posedge sys_clk) begin
         STATE_WAIT_TERMINATION: // S4
         begin
             // When entering S4 in write mode, drive LDS/UDS
-            if (mc_clk_rising && !req_read) begin
-                r_lds_drive <= (req_size == 'd1) || (req_address[0] == 1'b1);
-                r_uds_drive <= (req_size == 'd1) || (req_address[0] == 1'b0);
+            if (mc_clk_rising) begin
+                r_lds_drive <= (!req_read) && ((req_size == 'd1) || (req_address[0] == 1'b1));
+                r_uds_drive <= (!req_read) && ((req_size == 'd1) || (req_address[0] == 1'b0));
             end
             // Allthough S4 state, sample DTACK on falling edge
-            if (mc_clk_falling) begin
+            else if (mc_clk_falling) begin
                 if (dtack_sync == 1'b0) begin
                     state <= STATE_WAIT_LATCH_DATA;
                 end
@@ -412,9 +440,7 @@ always @(posedge sys_clk) begin
         end
         
         STATE_TERMINATE: // S7
-        begin
-            //if (req_read) data_valid <= 1'b1;
-            
+        begin           
             if (mc_clk_rising) begin
                 r_abus_drive <= 1'b0;
                 r_dbus_drive <= 1'b0;
