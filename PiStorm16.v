@@ -123,13 +123,14 @@ end
 (* async_reg = "true" *) reg [15:0] din_sync;
 
 always @(posedge sys_clk) begin
+    dtack_sync <= nDTACK;
+    berr_n_sync <= nBERR;
+    halt_sync <= nHALT_IN;
+    din_sync <= D_IN;
+    
     if (mc_clk_falling) begin
         reset_sync <= nRESET_IN;
-        halt_sync <= nHALT_IN;
-        dtack_sync <= nDTACK;
-        berr_n_sync <= nBERR;
         is_bm <= nBG_IN;
-        din_sync <= D_IN;
     end
 end
 
@@ -212,14 +213,28 @@ assign nLDS_OE = r_lds_drive;
 assign nAS_OE = r_as_drive;
 assign RnW_OE = r_rw_drive;
 
+(* async_reg = "true" *) reg [10:0] mc_clk_long;
+
+always @(negedge sys_clk) begin
+    mc_clk_long <= { mc_clk_long[9:0], CLK_7M };
+    
+    if (mc_clk_long[10:3] == 8'b11100000)
+        mc_clk_rising <= 1'b1;
+    else
+        mc_clk_rising <= 1'b0;
+        
+    if (mc_clk_long[10:3] == 8'b00011111)
+        mc_clk_falling <= 1'b1;
+    else
+        mc_clk_falling <= 1'b0;
+end
+
 // Synchronize clk_rising/clk_falling with MC_CLK.
 (* async_reg = "true" *) reg [1:0] mc_clk_sync;
 
-//wire mc_clk_rising = (mc_clk_sync == 2'b01);
-//wire mc_clk_falling = (mc_clk_sync == 2'b10);
 reg mc_clk_rising;
 reg mc_clk_falling;
-
+/*
 always @(negedge sys_clk) begin
     mc_clk_sync <= {mc_clk_sync[0], CLK_7M};
     
@@ -233,35 +248,13 @@ always @(negedge sys_clk) begin
     else
         mc_clk_falling <= 1'b0;   
 end
-
+*/
 reg mc_clk_possync;
 
+// Used for debug purposes only
 always @(posedge sys_clk) begin
     mc_clk_possync <= CLK_7M;
 end
-
-/*
-wire mc_clk_rising = (mc_clk_sync == 2'b01);
-wire mc_clk_falling = (mc_clk_sync == 2'b10);
-
-always @(negedge sys_clk) begin
-    mc_clk_sync <= {mc_clk_sync[0], CLK_7M};
-end
-*/
-
-// Phase counter clocks sys_clk pulses since rising edge of 7.14MHz MC CLK
-// At 200MHz clock it could count up to 28 (28 * 7.14), so make sure it is large
-// enough
-/*
-(* syn_keep = "true" *) reg [4:0] phase_counter;
-
-always @(posedge sys_clk) begin
-    if (mc_clk_rising)
-        phase_counter <= 4'd0;
-    else
-        phase_counter <= phase_counter + 4'd1;
-end
-*/
 
 // ## Pi interface.
 localparam [2:0] PI_REG_DATA_LO = 3'd0;
@@ -333,11 +326,6 @@ localparam [2:0] STATE_WAIT_LATCH_DATA = 4'd5;
 localparam [2:0] STATE_UPDATE_DATA_READ = 4'd6;
 localparam [2:0] STATE_TERMINATE = 4'd7;
 
-/*
-localparam [3:0] STATE_WAIT_OPEN_DATA_LATCH = 4'd3;
-localparam [3:0] STATE_MAYBE_TERMINATE_ACCESS = 4'd7;
-*/
-
 //localparam [3:0] STATE_RESET = 4'd15;
 
 reg [2:0] state = STATE_WAIT_ACTIVE_REQUEST;
@@ -367,24 +355,27 @@ always @(posedge sys_clk) begin
     end
     
     case (state)
+    
+        // Test 2: Async write maybe work
         STATE_WAIT_ACTIVE_REQUEST: // S0
         begin             
-            if (mc_clk_rising) begin           
+            //if (mc_clk_sync[0]) begin           
                 r_rw_drive <= 1'b0;
                 r_vma_drive <= 1'b0;
                 r_fc_drive <= req_active;
                 
                 state <= STATE_SET_ADDRESS_BUS & {3{req_active}};
-            end
+            //end
         end
         
+        // Test 1: Async write seems to work
         STATE_SET_ADDRESS_BUS: // S1
         begin
             // On falling mc clk edge (begin of S1 state), start driving address bus
-            if (mc_clk_falling) begin
+            //if (mc_clk_falling) begin
                 r_abus_drive <= 1'b1;
                 state <= STATE_WAIT_ASSERT_AS;
-            end
+            //end
         end
         
         STATE_WAIT_ASSERT_AS: // S2
@@ -411,19 +402,20 @@ always @(posedge sys_clk) begin
             end
         end
         
+        // Test 3: Async write seems to work
         STATE_WAIT_TERMINATION: // S4
         begin
             // When entering S4 in write mode, drive LDS/UDS
-            if (mc_clk_rising) begin
-                r_lds_drive <= (!req_read) && ((req_size == 'd1) || (req_address[0] == 1'b1));
-                r_uds_drive <= (!req_read) && ((req_size == 'd1) || (req_address[0] == 1'b0));
+            if (mc_clk_rising && !req_read) begin
+                r_lds_drive <= ((req_size == 'd1) || (req_address[0] == 1'b1));
+                r_uds_drive <= ((req_size == 'd1) || (req_address[0] == 1'b0));
             end
             // Allthough S4 state, sample DTACK on falling edge
-            else if (mc_clk_falling) begin
+            //else if (mc_clk_falling) begin
                 if (dtack_sync == 1'b0) begin
                     state <= STATE_WAIT_LATCH_DATA;
                 end
-            end
+            //end
         end
         
         STATE_WAIT_LATCH_DATA: // S5-S6
@@ -435,16 +427,19 @@ always @(posedge sys_clk) begin
                 r_as_drive <= 1'b0;
                 r_lds_drive <= 1'b0;
                 r_uds_drive <= 1'b0;
+                req_active <= 1'b0;
                 state <= STATE_TERMINATE;
             end
         end
         
+        // Test 4: Async write seems to work
+        // Comment: Waiting for rising edge allows to extend the terminate cycle a bit,
+        // for better bus state on Amiga
         STATE_TERMINATE: // S7
-        begin           
+        begin
             if (mc_clk_rising) begin
                 r_abus_drive <= 1'b0;
                 r_dbus_drive <= 1'b0;
-                req_active <= 1'b0;
                 state <= STATE_WAIT_ACTIVE_REQUEST;
             end
         end
