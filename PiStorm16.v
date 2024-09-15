@@ -442,7 +442,7 @@ always @(posedge sys_clk) begin
         begin
             if (mc_clk_rising) begin
                 state <= STATE_S6;
-                req_data_read[15:0] <= din_sync;
+                //req_data_read[15:0] <= din_sync;
                 
             end
         end
@@ -455,6 +455,7 @@ always @(posedge sys_clk) begin
                 r_lds_drive_write <= 1'b0;
                 r_uds_drive_read <= 1'b0;
                 r_uds_drive_write <= 1'b0;
+                req_data_read[15:0] <= din_sync;
                 
                 state <= STATE_S7;
             end
