@@ -198,8 +198,10 @@ reg r_as_drive;
 reg r_vma_drive;
 reg r_bgack_drive;
 reg r_rw_drive;
-reg r_lds_drive;
-reg r_uds_drive;
+reg r_lds_drive_read;
+reg r_uds_drive_read;
+reg r_lds_drive_write;
+reg r_uds_drive_write;
 
 // Disable all outputs for now
 assign nVMA_OE = r_vma_drive;
@@ -208,13 +210,13 @@ assign nHALT_OE = r_halt_drive;
 assign nBGACK_OE = r_bgack_drive;
 assign nBR_OE = r_br_drive;
 assign nBG_OE = r_bg_drive;
-assign nUDS_OE = r_uds_drive;
-assign nLDS_OE = r_lds_drive;
+assign nUDS_OE = r_uds_drive_read | r_uds_drive_write;
+assign nLDS_OE = r_lds_drive_read | r_lds_drive_write;
 assign nAS_OE = r_as_drive;
 assign RnW_OE = r_rw_drive;
 
 (* async_reg = "true" *) reg [10:0] mc_clk_long;
-/*
+
 always @(negedge sys_clk) begin
     mc_clk_long <= { mc_clk_long[9:0], CLK_7M };
     
@@ -228,13 +230,13 @@ always @(negedge sys_clk) begin
     else
         mc_clk_falling <= 1'b0;
 end
-*/
+
 // Synchronize clk_rising/clk_falling with MC_CLK.
 (* async_reg = "true" *) reg [1:0] mc_clk_sync;
 
 reg mc_clk_rising;
 reg mc_clk_falling;
-
+/*
 always @(negedge sys_clk) begin
     mc_clk_sync <= {mc_clk_sync[0], CLK_7M};
     
@@ -248,7 +250,7 @@ always @(negedge sys_clk) begin
     else
         mc_clk_falling <= 1'b0;   
 end
-
+*/
 reg mc_clk_possync;
 
 // Used for debug purposes only
@@ -286,10 +288,15 @@ reg [23:0] req_address;
 
 reg [23:0] r_abus;
 reg [15:0] r_dbus;
+reg [1:0] r_size;
+reg r_is_read;
 
 assign D_OUT = r_dbus[15:0];
 assign A_OUT = r_abus[23:1];
 assign FC_OUT = req_fc;
+
+reg [2:0] r_pi_a;
+reg [15:0] r_pi_data_out;
 
 always @(*) begin
     case (PI_A)
@@ -305,7 +312,7 @@ end
 
 always @(*) begin
     case (state)
-        STATE_TERMINATE: data_valid <= 1'b1;
+        STATE_S7: data_valid <= 1'b1;
         default: data_valid <= 1'b0;
     endcase
 end
@@ -313,26 +320,30 @@ end
 // Synchronize WR command from Pi
 (* async_reg = "true" *) reg [1:0] pi_wr_sync;
 wire pi_wr_falling = (pi_wr_sync == 2'b10);
-wire pi_wr_rising = (pi_wr_sync == 2'b10);
+wire pi_wr_rising = (pi_wr_sync == 2'b01);
 
 always @(posedge sys_clk) begin
+    r_pi_a <= PI_A;
+    r_pi_data_out <= pi_data_out;
     pi_wr_sync <= { pi_wr_sync[0], PI_WR };
 end
 
 // ## Access state machine.
-localparam [2:0] STATE_WAIT_ACTIVE_REQUEST = 4'd0;
-localparam [2:0] STATE_SET_ADDRESS_BUS = 4'd1;
-localparam [2:0] STATE_WAIT_ASSERT_AS = 4'd2;
-localparam [2:0] STATE_DRIVE_DATA_IF_WRITE = 4'd3;
-localparam [2:0] STATE_WAIT_TERMINATION = 4'd4;
-localparam [2:0] STATE_WAIT_LATCH_DATA = 4'd5;
-localparam [2:0] STATE_TERMINATE_SETUP = 4'd6;
-localparam [2:0] STATE_TERMINATE = 4'd7;
+localparam [3:0] STATE_S0 = 4'd0;
+localparam [3:0] STATE_S1 = 4'd1;
+localparam [3:0] STATE_S2 = 4'd2;
+localparam [3:0] STATE_S3 = 4'd3;
+localparam [3:0] STATE_S4 = 4'd4;
+localparam [3:0] STATE_S5 = 4'd5;
+localparam [3:0] STATE_S6 = 4'd6;
+localparam [3:0] STATE_S7 = 4'd7;
 
-//localparam [3:0] STATE_RESET = 4'd15;
+localparam [3:0] STATE_RESET = 4'd15;
 
-reg [2:0] state = STATE_WAIT_ACTIVE_REQUEST;
+reg [3:0] state = STATE_S0;
 reg [6:0] reset_delay;
+
+
 
 // Main state machine
 always @(posedge sys_clk) begin
@@ -357,112 +368,106 @@ always @(posedge sys_clk) begin
         endcase
     end
     
-    case (state)
-    
-        // Test 2: Async write maybe work
-        STATE_WAIT_ACTIVE_REQUEST: // S0
+    case (state)    
+        STATE_S0:
         begin             
-            if (mc_clk_sync[0]) begin           
-                r_rw_drive <= 1'b0;
-                r_vma_drive <= 1'b0;
-                r_fc_drive <= req_active;
-                
-                if (req_active) begin
+            // In S0 stop driving RW and VMA
+            r_rw_drive <= 1'b0;
+            r_vma_drive <= 1'b0;
+            
+            // If request is pending (active) then start rolling    
+            if (req_active) begin               
+                //if (mc_clk_falling) begin
+                    r_size <= req_size;
+                    r_is_read <= req_read;
                     r_abus <= req_address[23:0];
                     r_dbus <= req_data_write[15:0];
-                    state <= STATE_SET_ADDRESS_BUS;
-                end
-                //state <= STATE_SET_ADDRESS_BUS & {3{req_active}};
+                    state <= STATE_S1;
+                //end
             end
         end
         
-        // Test 1: Async write seems to work
-        STATE_SET_ADDRESS_BUS: // S1
+        STATE_S1:
         begin
-            // On falling mc clk edge (begin of S1 state), start driving address bus
-            if (mc_clk_falling) begin
-                r_abus_drive <= 1'b1;
-                state <= STATE_WAIT_ASSERT_AS;
-            end
-        end
-        
-        STATE_WAIT_ASSERT_AS: // S2
-        begin
-            if (mc_clk_rising) begin
+            // drive address bus in S1
+            r_abus_drive <= 1'b1;
+            r_fc_drive <= 1'b1;
+
+            // On rising clk edge go to S2
+            if (mc_clk_rising) begin           
                 // Assert address strobe
                 r_as_drive <= 1'b1;
-                // Drive RW low (for write) or high (for read)
-                r_rw_drive <= !req_read;
-                // When entering S2 in read mode, drive LDS/UDS
-                r_lds_drive <= (req_read) && ((req_size == 'd1) || (r_abus[0] == 1'b1));
-                r_uds_drive <= (req_read) && ((req_size == 'd1) || (r_abus[0] == 1'b0));
 
-                state <= STATE_DRIVE_DATA_IF_WRITE;
+                // Drive RW low (for write) or high (for read)
+                r_rw_drive <= !r_is_read;
+                
+                // When entering S2 in read mode, drive LDS/UDS
+                r_lds_drive_read <= (r_is_read) && ((r_size == 'd1) || (r_abus[0] == 1'b1));
+                r_uds_drive_read <= (r_is_read) && ((r_size == 'd1) || (r_abus[0] == 1'b0));
+
+                state <= STATE_S2;
             end
         end
         
-        STATE_DRIVE_DATA_IF_WRITE: // S3
+        STATE_S2:
         begin
             if (mc_clk_falling) begin
-                if (!req_read)
-                    r_dbus_drive <= 1'b1;
-                state <= STATE_WAIT_TERMINATION;
+                state <= STATE_S3;
             end
         end
         
-        // Test 3: Async write seems to work
-        STATE_WAIT_TERMINATION: // S4
+        STATE_S3:
         begin
-            // When entering S4 in write mode, drive LDS/UDS
-            if (mc_clk_rising && !req_read) begin
-                r_lds_drive <= ((req_size == 'd1) || (r_abus[0] == 1'b1));
-                r_uds_drive <= ((req_size == 'd1) || (r_abus[0] == 1'b0));
+            r_dbus_drive <= !r_is_read;
+            
+            if (mc_clk_rising) begin
+                state <= STATE_S4;
+                
+                r_lds_drive_write <= (!r_is_read) && ((r_size == 'd1) || (r_abus[0] == 1'b1));
+                r_uds_drive_write <= (!r_is_read) && ((r_size == 'd1) || (r_abus[0] == 1'b0));
             end
+        end
+        
+        STATE_S4:
+        begin
             // Allthough S4 state, sample DTACK on falling edge
-            else if (mc_clk_falling) begin
+            if (mc_clk_falling) begin
                 if (dtack_sync == 1'b0) begin
-                    state <= STATE_WAIT_LATCH_DATA;
+                    state <= STATE_S5;
                 end
             end
         end
         
-        STATE_WAIT_LATCH_DATA: // S5-S6
-        begin
-            // S5 cycle does nothing, S6 is for devices to put data on the bus
-            // during transition from S6 to S7 data is sampled
-            if (mc_clk_falling) begin
-                /*r_as_drive <= 1'b0;
-                r_lds_drive <= 1'b0;
-                r_uds_drive <= 1'b0;
-                if (!req_read) req_active <= 1'b0;*/
-                state <= STATE_TERMINATE_SETUP;
-            end
-        end
-        
-        STATE_TERMINATE_SETUP: // S7
+        STATE_S5:
         begin
             if (mc_clk_rising) begin
-                state <= STATE_TERMINATE;
-                if (!req_read) req_active <= 1'b0;
+                state <= STATE_S6;
+                req_data_read[15:0] <= din_sync;
+                
             end
         end
         
-        // Test 4: Async write seems to work
-        // Comment: Waiting for rising edge allows to extend the terminate cycle a bit,
-        // for better bus state on Amiga
-        STATE_TERMINATE: // S7
+        STATE_S6:
         begin
-            if (mc_clk_falling) begin
-                req_data_read <= din_sync;
-                req_active <= 1'b0;
+            if (mc_clk_falling) begin    
                 r_as_drive <= 1'b0;
-                r_lds_drive <= 1'b0;
-                r_uds_drive <= 1'b0;
+                r_lds_drive_read <= 1'b0;
+                r_lds_drive_write <= 1'b0;
+                r_uds_drive_read <= 1'b0;
+                r_uds_drive_write <= 1'b0;
+                
+                state <= STATE_S7;
             end
+        end
+               
+        STATE_S7:
+        begin
             if (mc_clk_rising) begin
+                req_active <= 1'b0;
                 r_abus_drive <= 1'b0;
                 r_dbus_drive <= 1'b0;
-                state <= STATE_WAIT_ACTIVE_REQUEST;
+                r_fc_drive <= 1'b0;
+                state <= STATE_S0;
             end
         end
     endcase
