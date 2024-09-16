@@ -220,43 +220,18 @@ assign RnW_OE = r_rw_drive;
 always @(negedge sys_clk) begin
     mc_clk_long <= { mc_clk_long[9:0], CLK_7M };
     
-    if (mc_clk_long[10:3] == 8'b11100000)
-        mc_clk_rising <= 1'b1;
-    else
-        mc_clk_rising <= 1'b0;
-        
-    if (mc_clk_long[10:3] == 8'b00011111)
-        mc_clk_falling <= 1'b1;
-    else
-        mc_clk_falling <= 1'b0;
+    case (mc_clk_long[10:3])
+        8'b11110000: mc_clk_rising <= 1'b1;
+        8'b00001111: mc_clk_falling <= 1'b1;
+        default: begin
+            mc_clk_rising <= 1'b0;
+            mc_clk_falling <= 1'b0;
+        end
+    endcase
 end
-
-// Synchronize clk_rising/clk_falling with MC_CLK.
-(* async_reg = "true" *) reg [1:0] mc_clk_sync;
 
 reg mc_clk_rising;
 reg mc_clk_falling;
-/*
-always @(negedge sys_clk) begin
-    mc_clk_sync <= {mc_clk_sync[0], CLK_7M};
-    
-    if (mc_clk_sync == 2'b01)
-        mc_clk_rising <= 1'b1;
-    else
-        mc_clk_rising <= 1'b0;
-        
-    if (mc_clk_sync == 2'b10)
-        mc_clk_falling <= 1'b1;
-    else
-        mc_clk_falling <= 1'b0;   
-end
-*/
-reg mc_clk_possync;
-
-// Used for debug purposes only
-always @(posedge sys_clk) begin
-    mc_clk_possync <= CLK_7M;
-end
 
 // ## Pi interface.
 localparam [2:0] PI_REG_DATA_LO = 3'd0;
@@ -343,8 +318,6 @@ localparam [3:0] STATE_RESET = 4'd15;
 reg [3:0] state = STATE_S0;
 reg [6:0] reset_delay;
 
-
-
 // Main state machine
 always @(posedge sys_clk) begin
     if (pi_wr_falling) begin
@@ -371,25 +344,19 @@ always @(posedge sys_clk) begin
     case (state)    
         STATE_S0:
         begin             
-            // In S0 stop driving RW and VMA
-            r_rw_drive <= 1'b0;
-            r_vma_drive <= 1'b0;
-            
             // If request is pending (active) then start rolling    
             if (req_active) begin               
-                //if (mc_clk_falling) begin
-                    r_size <= req_size;
-                    r_is_read <= req_read;
-                    r_abus <= req_address[23:0];
-                    r_dbus <= req_data_write[15:0];
-                    state <= STATE_S1;
-                //end
+                r_size <= req_size;
+                r_is_read <= req_read;
+                r_abus <= req_address[23:0];
+                r_dbus <= req_data_write[15:0];
+                state <= STATE_S1;
             end
         end
         
         STATE_S1:
         begin
-            // drive address bus in S1
+            // drive address bus in S1 
             r_abus_drive <= 1'b1;
             r_fc_drive <= 1'b1;
 
@@ -456,7 +423,7 @@ always @(posedge sys_clk) begin
                 r_uds_drive_read <= 1'b0;
                 r_uds_drive_write <= 1'b0;
                 req_data_read[15:0] <= din_sync;
-                
+                req_active <= 1'b0;
                 state <= STATE_S7;
             end
         end
@@ -464,11 +431,15 @@ always @(posedge sys_clk) begin
         STATE_S7:
         begin
             if (mc_clk_rising) begin
-                req_active <= 1'b0;
+                
                 r_abus_drive <= 1'b0;
                 r_dbus_drive <= 1'b0;
-                r_fc_drive <= 1'b0;
                 state <= STATE_S0;
+                
+                // In S0 stop driving FC, RW and VMA
+                r_rw_drive <= 1'b0;
+                r_vma_drive <= 1'b0;
+                r_fc_drive <= 1'b0;
             end
         end
     endcase
