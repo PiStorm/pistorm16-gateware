@@ -430,7 +430,7 @@ always @(posedge sys_clk) begin
                
         STATE_S7:
         begin
-            if (mc_clk_rising) begin
+            //if (mc_clk_rising) begin
                 
                 r_abus_drive <= 1'b0;
                 r_dbus_drive <= 1'b0;
@@ -440,7 +440,7 @@ always @(posedge sys_clk) begin
                 r_rw_drive <= 1'b0;
                 r_vma_drive <= 1'b0;
                 r_fc_drive <= 1'b0;
-            end
+            //end
         end
     endcase
 end
