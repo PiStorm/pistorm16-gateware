@@ -237,7 +237,7 @@ always @(negedge sys_clk) begin
         end
     endcase
     
-    case (mc_clk_long[4:3])
+    case (mc_clk_long[4:2])
         3'b001: mc_clk_latch <= 1'b1;
         3'b011: mc_clk_latch_p1 <= 1'b1;
         default: begin
