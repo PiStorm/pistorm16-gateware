@@ -105,14 +105,15 @@ assign PI_GPIO_OE[27] = 0;
 (* async_reg = "true" *) reg [2:0] ipl_sync [1:0];
 reg [2:0] ipl;
 
-always @(posedge sys_clk) begin
-    if (mc_clk_falling) begin
+//always @(posedge sys_clk) begin
+//    if (mc_clk_falling) begin
+always @(posedge mc_clk_falling) begin
         ipl_sync[0] <= ~IPL;
         ipl_sync[1] <= ipl_sync[0];
 
         if (ipl_sync[0] == ipl_sync[1])
             ipl <= ipl_sync[0];
-    end
+//    end
 end
 
 // Synchronize bus control signal inputs
@@ -127,7 +128,7 @@ always @(posedge sys_clk) begin
     berr_n_sync <= nBERR;
     halt_sync <= nHALT_IN;
     din_sync <= D_IN;
-    
+
     if (mc_clk_falling) begin
         reset_sync <= nRESET_IN;
         is_bm <= nBG_IN;
@@ -215,7 +216,7 @@ assign nLDS_OE = r_lds_drive_read | r_lds_drive_write;
 assign nAS_OE = r_as_drive;
 assign RnW_OE = r_rw_drive;
 
-(* async_reg = "true" *) reg [10:0] mc_clk_long;
+(* async_reg = "true" *) reg [15:0] mc_clk_long;
 
 reg mc_clk_rising;
 reg mc_clk_falling;
@@ -223,7 +224,7 @@ reg mc_clk_latch;
 reg mc_clk_latch_p1;
 
 always @(negedge sys_clk) begin
-    mc_clk_long <= { mc_clk_long[9:0], CLK_7M };
+    mc_clk_long <= { mc_clk_long[14:0], CLK_7M };
     
     // The values for latch, rising and falling detector from shift register are matched
     // for 140 MHz sys_clk
