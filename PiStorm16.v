@@ -217,21 +217,34 @@ assign RnW_OE = r_rw_drive;
 
 (* async_reg = "true" *) reg [10:0] mc_clk_long;
 
+reg mc_clk_rising;
+reg mc_clk_falling;
+reg mc_clk_latch;
+reg mc_clk_latch_p1;
+
 always @(negedge sys_clk) begin
     mc_clk_long <= { mc_clk_long[9:0], CLK_7M };
     
-    case (mc_clk_long[10:3])
-        8'b11110000: mc_clk_rising <= 1'b1;
-        8'b00001111: mc_clk_falling <= 1'b1;
+    // The values for latch, rising and falling detector from shift register are matched
+    // for 140 MHz sys_clk
+    case (mc_clk_long[7:6])
+        2'b10: mc_clk_rising <= 1'b1;
+        2'b01: mc_clk_falling <= 1'b1;
         default: begin
             mc_clk_rising <= 1'b0;
             mc_clk_falling <= 1'b0;
         end
     endcase
+    
+    case (mc_clk_long[4:3])
+        3'b001: mc_clk_latch <= 1'b1;
+        3'b011: mc_clk_latch_p1 <= 1'b1;
+        default: begin
+            mc_clk_latch <= 1'b0;
+            mc_clk_latch_p1 <= 1'b0;
+        end
+    endcase
 end
-
-reg mc_clk_rising;
-reg mc_clk_falling;
 
 // ## Pi interface.
 localparam [2:0] PI_REG_DATA_LO = 3'd0;
@@ -249,17 +262,18 @@ localparam [2:0] FW_TYPE_PS16 = 3'd2;
 localparam [4:0] FW_EXT_DATA = 5'd0;
 
 wire [15:0] firmware_version = { FW_MAJOR, FW_MINOR, FW_TYPE_PS16, FW_EXT_DATA };
-wire [15:0] pi_status = {7'd0, data_valid, req_active, req_terminated_normally, ipl, halt_sync, reset_sync, is_bm};
+wire [15:0] pi_status = {7'd0, second_cycle, req_active, req_terminated_normally, ipl, halt_sync, reset_sync, is_bm};
 
 reg [2:0] req_fc;
 reg req_read;
-reg data_valid;
+reg second_cycle;
 reg [1:0] req_size;
 reg req_terminated_normally;
 reg is_bm;
 reg [31:0] req_data_read;
 reg [31:0] req_data_write;
 reg [23:0] req_address;
+reg [23:0] r_address_p2;
 
 reg [23:0] r_abus;
 reg [15:0] r_dbus;
@@ -272,23 +286,17 @@ assign FC_OUT = req_fc;
 
 reg [2:0] r_pi_a;
 reg [15:0] r_pi_data_out;
+reg [31:0] r_data_write;
 
 always @(*) begin
     case (PI_A)
-        PI_REG_DATA_LO: pi_data_out <= req_data_read[15:0];
-        PI_REG_DATA_HI: pi_data_out <= req_data_read[31:16];
-        PI_REG_ADDR_LO: pi_data_out <= req_address[15:0];
-        PI_REG_ADDR_HI: pi_data_out <= {2'd0, req_fc, req_read, req_size, req_address[23:16]};
-        PI_REG_STATUS: pi_data_out <= pi_status;
-        PI_REG_VERSION: pi_data_out <= firmware_version;
-        default: pi_data_out <= 16'bx;
-    endcase
-end
-
-always @(*) begin
-    case (state)
-        STATE_S7: data_valid <= 1'b1;
-        default: data_valid <= 1'b0;
+        PI_REG_DATA_LO: pi_data_out = req_data_read[15:0];
+        PI_REG_DATA_HI: pi_data_out = req_data_read[31:16];
+        PI_REG_ADDR_LO: pi_data_out = req_address[15:0];
+        PI_REG_ADDR_HI: pi_data_out = {2'd0, req_fc, req_read, req_size, req_address[23:16]};
+        PI_REG_STATUS: pi_data_out = pi_status;
+        PI_REG_VERSION: pi_data_out = firmware_version;
+        default: pi_data_out = 16'bx;
     endcase
 end
 
@@ -304,24 +312,23 @@ always @(posedge sys_clk) begin
 end
 
 // ## Access state machine.
-localparam [3:0] STATE_S0 = 4'd0;
-localparam [3:0] STATE_S1 = 4'd1;
-localparam [3:0] STATE_S2 = 4'd2;
-localparam [3:0] STATE_S3 = 4'd3;
-localparam [3:0] STATE_S4 = 4'd4;
-localparam [3:0] STATE_S5 = 4'd5;
-localparam [3:0] STATE_S6 = 4'd6;
-localparam [3:0] STATE_S7 = 4'd7;
+localparam [8:0] STATE_WAIT  = 'b000000000;
+localparam [8:0] STATE_S0    = 'b000000001;
+localparam [8:0] STATE_S1    = 'b000000010;
+localparam [8:0] STATE_S2    = 'b000000100;
+localparam [8:0] STATE_S3    = 'b000001000;
+localparam [8:0] STATE_S4    = 'b000010000;
+localparam [8:0] STATE_S5    = 'b000100000;
+localparam [8:0] STATE_S6    = 'b001000000;
+localparam [8:0] STATE_S7    = 'b010000000;
+localparam [8:0] STATE_S7_S0 = 'b100000000;
 
-localparam [3:0] STATE_RESET = 4'd15;
-
-reg [3:0] state = STATE_S0;
-reg [6:0] reset_delay;
+reg [8:0] state = STATE_WAIT;
 
 // Main state machine
 always @(posedge sys_clk) begin
     if (pi_wr_falling) begin
-        case (PI_A)
+        case (PI_A) // synthesis full_case
             PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
             PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
             PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
@@ -341,17 +348,31 @@ always @(posedge sys_clk) begin
         endcase
     end
     
-    case (state)    
-        STATE_S0:
-        begin             
+    case (state) // synthesis full_case
+        STATE_WAIT:
+        begin
             // If request is pending (active) then start rolling    
-            if (req_active) begin               
+            if (req_active) begin
                 r_size <= req_size;
                 r_is_read <= req_read;
                 r_abus <= req_address[23:0];
-                r_dbus <= req_data_write[15:0];
-                state <= STATE_S1;
+                r_address_p2 <= req_address + 24'd2;
+                r_data_write <= req_data_write;
+                second_cycle <= 1'b0;
+                state <= STATE_S0;
             end
+        end
+        
+        STATE_S0:
+        begin
+            if (!r_is_read)
+            begin
+                if (r_size == 2'b11)
+                    r_dbus <= r_data_write[31:16];
+                else    
+                    r_dbus <= r_data_write[15:0];
+            end
+            state <= STATE_S1;
         end
         
         STATE_S1:
@@ -369,8 +390,8 @@ always @(posedge sys_clk) begin
                 r_rw_drive <= !r_is_read;
                 
                 // When entering S2 in read mode, drive LDS/UDS
-                r_lds_drive_read <= (r_is_read) && ((r_size == 'd1) || (r_abus[0] == 1'b1));
-                r_uds_drive_read <= (r_is_read) && ((r_size == 'd1) || (r_abus[0] == 1'b0));
+                r_lds_drive_read <= (r_is_read) && ((r_size[0]) || (r_abus[0] == 1'b1));
+                r_uds_drive_read <= (r_is_read) && ((r_size[0]) || (r_abus[0] == 1'b0));
 
                 state <= STATE_S2;
             end
@@ -390,8 +411,8 @@ always @(posedge sys_clk) begin
             if (mc_clk_rising) begin
                 state <= STATE_S4;
                 
-                r_lds_drive_write <= (!r_is_read) && ((r_size == 'd1) || (r_abus[0] == 1'b1));
-                r_uds_drive_write <= (!r_is_read) && ((r_size == 'd1) || (r_abus[0] == 1'b0));
+                r_lds_drive_write <= (!r_is_read) && ((r_size[0]) || (r_abus[0] == 1'b1));
+                r_uds_drive_write <= (!r_is_read) && ((r_size[0]) || (r_abus[0] == 1'b0));
             end
         end
         
@@ -409,40 +430,62 @@ always @(posedge sys_clk) begin
         begin
             if (mc_clk_rising) begin
                 state <= STATE_S6;
-                //req_data_read[15:0] <= din_sync;
-                
             end
         end
         
         STATE_S6:
         begin
+            if (mc_clk_latch) begin
+                if (r_is_read) begin
+                    if (r_size == 2'b11)
+                        req_data_read[31:16] <= din_sync;
+                    else
+                        req_data_read[15:0] <= din_sync;
+                end
+            end
+            if (mc_clk_latch_p1) begin
+                second_cycle <= 1'b1;
+                req_active <= r_size[1];
+            end
             if (mc_clk_falling) begin    
                 r_as_drive <= 1'b0;
                 r_lds_drive_read <= 1'b0;
                 r_lds_drive_write <= 1'b0;
                 r_uds_drive_read <= 1'b0;
                 r_uds_drive_write <= 1'b0;
-                req_data_read[15:0] <= din_sync;
-                req_active <= 1'b0;
-                state <= STATE_S7;
+                if (r_size == 'd3)
+                    state <= STATE_S7_S0;
+                else
+                    state <= STATE_S7;
             end
         end
-               
+
+        STATE_S7_S0:
+        begin
+            r_abus_drive <= 1'b0;
+            r_dbus_drive <= 1'b0;
+            r_rw_drive <= 1'b0;
+            r_vma_drive <= 1'b0;
+            r_fc_drive <= 1'b0;
+            
+            if (mc_clk_rising) begin              
+                r_abus <= r_address_p2;
+                r_size <= 2'b01;
+                state <= STATE_S0;
+            end
+        end
+
         STATE_S7:
         begin
-            //if (mc_clk_rising) begin
-                
-                r_abus_drive <= 1'b0;
-                r_dbus_drive <= 1'b0;
-                state <= STATE_S0;
-                
-                // In S0 stop driving FC, RW and VMA
-                r_rw_drive <= 1'b0;
-                r_vma_drive <= 1'b0;
-                r_fc_drive <= 1'b0;
-            //end
+            r_abus_drive <= 1'b0;
+            r_dbus_drive <= 1'b0;
+            r_rw_drive <= 1'b0;
+            r_vma_drive <= 1'b0;
+            r_fc_drive <= 1'b0;
+            state <= STATE_WAIT;
         end
     endcase
 end
 
 endmodule
+

@@ -10,11 +10,11 @@
 # Timing Model: C3 (final)
 
 # PLL Constraints
-################# 8.333 (120 MHz), 7.143 (140 MHz), 6.667 (150 MHz)
+################# 8.333 (120 MHz), 7.143 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
 create_clock -period 7.143 SYS_PLL_CLKOUT0
 create_clock -period 140 CLK_7M
 create_clock -period 1400 ECLK
-create_clock -period 20 IN_CLK_50M
+# create_clock -period 20 IN_CLK_50M
 
 # GPIO Constraints
 ####################
