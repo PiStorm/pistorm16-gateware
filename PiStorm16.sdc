@@ -11,13 +11,20 @@
 
 # PLL Constraints
 ################# 8.333 (120 MHz), 7.143 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
-create_clock -period 7.143 SYS_PLL_CLKOUT0
-create_clock -period 140 CLK_7M
-create_clock -period 1400 ECLK
-# create_clock -period 20 IN_CLK_50M
+create_clock -period 7.1429 [get_ports {SYS_PLL_CLKOUT0}]
+create_clock -period 140 [get_ports {CLK_7M}]
+
+set_clock_groups -asynchronous -group {SYS_PLL_CLKOUT0} -group {CLK_7M}
+
+set_false_path -from [get_ports {PI_GPIO_IN* D_IN*}]
+set_false_path -to [get_ports {PI_GPIO_OUT* A_OUT* D_OUT*}]
 
 # GPIO Constraints
 ####################
+
+#set_output_delay -clock MCCLK -min 0 [get_ports {A_OUT*}]
+#set_output_delay -clock MCCLK -max 3 [get_ports {A_OUT*}]
+
 # set_input_delay -clock <CLOCK> -max <MAX CALCULATION> [get_ports {IN_CLK_50M}]
 # set_input_delay -clock <CLOCK> -min <MIN CALCULATION> [get_ports {IN_CLK_50M}]
 # set_input_delay -clock <CLOCK> -max <MAX CALCULATION> [get_ports {nDTACK}]
