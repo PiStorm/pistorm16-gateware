@@ -127,6 +127,7 @@ always @(posedge sys_clk) begin
     dtack_sync <= nDTACK;
     berr_n_sync <= nBERR;
     halt_sync <= nHALT_IN;
+
     din_sync <= D_IN;
 
     if (mc_clk_falling) begin
@@ -271,8 +272,8 @@ reg second_cycle;
 reg [1:0] req_size;
 reg req_terminated_normally;
 reg is_bm;
-reg [31:0] req_data_read;
-reg [31:0] req_data_write;
+reg [15:0] req_data_read [0:1];
+reg [31:0] req_data_write [0:1];
 reg [23:0] req_address;
 reg [23:0] r_address_p2;
 
@@ -285,14 +286,12 @@ assign D_OUT = r_dbus[15:0];
 assign A_OUT = r_abus[23:1];
 assign FC_OUT = req_fc;
 
-reg [2:0] r_pi_a;
-reg [15:0] r_pi_data_out;
-reg [31:0] r_data_write;
+reg [15:0] r_data_write [0:1];
 
 always @(*) begin
     case (PI_A)
-        PI_REG_DATA_LO: pi_data_out = req_data_read[15:0];
-        PI_REG_DATA_HI: pi_data_out = req_data_read[31:16];
+        PI_REG_DATA_LO: pi_data_out = req_data_read[0];
+        PI_REG_DATA_HI: pi_data_out = req_data_read[1];
         PI_REG_ADDR_LO: pi_data_out = req_address[15:0];
         PI_REG_ADDR_HI: pi_data_out = {2'd0, req_fc, req_read, req_size, req_address[23:16]};
         PI_REG_STATUS: pi_data_out = pi_status;
@@ -303,13 +302,15 @@ end
 
 // Synchronize WR command from Pi
 (* async_reg = "true" *) reg [1:0] pi_wr_sync;
-wire pi_wr_falling = (pi_wr_sync == 2'b10);
-wire pi_wr_rising = (pi_wr_sync == 2'b01);
+reg pi_wr_falling;
 
 always @(posedge sys_clk) begin
-    r_pi_a <= PI_A;
-    r_pi_data_out <= pi_data_out;
     pi_wr_sync <= { pi_wr_sync[0], PI_WR };
+
+    if (pi_wr_sync == 2'b10)
+        pi_wr_falling <= 1'b1;
+    else
+        pi_wr_falling <= 1'b0;
 end
 
 // ## Access state machine.
@@ -325,13 +326,14 @@ localparam [8:0] STATE_S7    = 'b010000000;
 localparam [8:0] STATE_S7_S0 = 'b100000000;
 
 reg [8:0] state = STATE_WAIT;
+reg high_word;
 
 // Main state machine
 always @(posedge sys_clk) begin
     if (pi_wr_falling) begin
         case (PI_A) // synthesis full_case
-            PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
-            PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
+            PI_REG_DATA_LO: req_data_write[0] <= pi_data_in;
+            PI_REG_DATA_HI: req_data_write[1] <= pi_data_in;
             PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
             PI_REG_ADDR_HI: begin
                 req_address[23:16] <= pi_data_in[7:0];
@@ -339,6 +341,7 @@ always @(posedge sys_clk) begin
                 req_read <= pi_data_in[10];
                 req_fc <= pi_data_in[13:11];
                 req_active <= 1'b1;
+                high_word = pi_data_in[9];
             end
             PI_REG_CONTROL: begin
                 if (pi_data_in[15]) begin
@@ -358,7 +361,8 @@ always @(posedge sys_clk) begin
                 r_is_read <= req_read;
                 r_abus <= req_address[23:0];
                 r_address_p2 <= req_address + 24'd2;
-                r_data_write <= req_data_write;
+                r_data_write[0] <= req_data_write[0];
+                r_data_write[1] <= req_data_write[1];
                 second_cycle <= 1'b0;
                 state <= STATE_S0;
             end
@@ -366,13 +370,7 @@ always @(posedge sys_clk) begin
         
         STATE_S0:
         begin
-            if (!r_is_read)
-            begin
-                if (r_size == 2'b11)
-                    r_dbus <= r_data_write[31:16];
-                else    
-                    r_dbus <= r_data_write[15:0];
-            end
+            r_dbus <= r_data_write[high_word];
             state <= STATE_S1;
         end
         
@@ -388,11 +386,11 @@ always @(posedge sys_clk) begin
                 r_as_drive <= 1'b1;
 
                 // Drive RW low (for write) or high (for read)
-                r_rw_drive <= !r_is_read;
+                r_rw_drive <= ~r_is_read;
                 
                 // When entering S2 in read mode, drive LDS/UDS
-                r_lds_drive_read <= (r_is_read) && ((r_size[0]) || (r_abus[0] == 1'b1));
-                r_uds_drive_read <= (r_is_read) && ((r_size[0]) || (r_abus[0] == 1'b0));
+                r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
+                r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
 
                 state <= STATE_S2;
             end
@@ -407,13 +405,13 @@ always @(posedge sys_clk) begin
         
         STATE_S3:
         begin
-            r_dbus_drive <= !r_is_read;
+            r_dbus_drive <= ~r_is_read;
             
             if (mc_clk_rising) begin
                 state <= STATE_S4;
                 
-                r_lds_drive_write <= (!r_is_read) && ((r_size[0]) || (r_abus[0] == 1'b1));
-                r_uds_drive_write <= (!r_is_read) && ((r_size[0]) || (r_abus[0] == 1'b0));
+                r_lds_drive_write <= ~r_is_read & (r_size[0] | r_abus[0]);
+                r_uds_drive_write <= ~r_is_read & (r_size[0] | ~r_abus[0]);
             end
         end
         
@@ -438,10 +436,7 @@ always @(posedge sys_clk) begin
         begin
             if (mc_clk_latch) begin
                 if (r_is_read) begin
-                    if (r_size == 2'b11)
-                        req_data_read[31:16] <= din_sync;
-                    else
-                        req_data_read[15:0] <= din_sync;
+                    req_data_read[high_word] <= din_sync;
                 end
             end
             if (mc_clk_latch_p1) begin
@@ -469,9 +464,10 @@ always @(posedge sys_clk) begin
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
             
-            if (mc_clk_rising) begin              
+            if (mc_clk_rising) begin
                 r_abus <= r_address_p2;
                 r_size <= 2'b01;
+                high_word <= 'b0;
                 state <= STATE_S0;
             end
         end
