@@ -22,15 +22,22 @@ module EClock(
 );
 
 reg [3:0] cnt = 0;
+reg out;
 
-// EClock is six CPU clocks low, 5 CPU clocks high
-assign ECLOCK_OUT = (cnt > 4'd5);
+
+assign ECLOCK_OUT = out;
 
 always @(posedge CLOCK_IN) begin
     if (cnt == 4'd9)
         cnt <= 4'd0;
     else
         cnt <= cnt + 4'd1;
+
+    // EClock is six CPU clocks low, 4 CPU clocks high
+    if (cnt > 4'd5)
+        out <= 1;
+    else
+        out <= 0;
 end
 
 endmodule
