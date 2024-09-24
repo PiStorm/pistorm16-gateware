@@ -22,6 +22,13 @@ set_false_path -to [get_ports {PI_GPIO_OUT* A_OUT* D_OUT*}]
 # GPIO Constraints
 ####################
 
+set_multicycle_path 2 -setup -to [get_cells req_data_read*]
+set_multicycle_path 2 -setup -to [get_cells A_OUT*]
+set_multicycle_path 2 -hold -to [get_cells A_OUT*]
+set_multicycle_path 2 -setup -to [get_cells D_OUT*]
+set_multicycle_path 2 -hold -to [get_cells D_OUT*]
+
+
 #set_output_delay -clock MCCLK -min 0 [get_ports {A_OUT*}]
 #set_output_delay -clock MCCLK -max 3 [get_ports {A_OUT*}]
 
