@@ -16,18 +16,21 @@ create_clock -period 140 [get_ports {CLK_7M}]
 
 set_clock_groups -asynchronous -group {SYS_PLL_CLKOUT0} -group {CLK_7M}
 
+# False paths
+####################
+
 set_false_path -from [get_ports {PI_GPIO_IN* D_IN*}]
 set_false_path -to [get_ports {PI_GPIO_OUT* A_OUT* D_OUT*}]
+#set_false_path -to [get_cells r_address_p2*]
 
 # GPIO Constraints
 ####################
 
 set_multicycle_path 2 -setup -to [get_cells req_data_read*]
 set_multicycle_path 2 -setup -to [get_cells A_OUT*]
-set_multicycle_path 2 -hold -to [get_cells A_OUT*]
 set_multicycle_path 2 -setup -to [get_cells D_OUT*]
-set_multicycle_path 2 -hold -to [get_cells D_OUT*]
-
+set_multicycle_path 2 -setup -to [get_cells D_OE*]
+set_multicycle_path 2 -setup -from [get_cells D_IN*]
 
 #set_output_delay -clock MCCLK -min 0 [get_ports {A_OUT*}]
 #set_output_delay -clock MCCLK -max 3 [get_ports {A_OUT*}]
