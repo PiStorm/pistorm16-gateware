@@ -200,10 +200,14 @@ reg r_as_drive;
 reg r_vma_drive;
 reg r_bgack_drive;
 reg r_rw_drive;
+reg r_rw_clear;
 reg r_lds_drive_read;
 reg r_uds_drive_read;
 reg r_lds_drive_write;
 reg r_uds_drive_write;
+reg r_uds_clear;
+reg r_lds_clear;
+reg r_as_ds_clear;
 
 // Disable all outputs for now
 assign nVMA_OE = r_vma_drive;
@@ -212,10 +216,6 @@ assign nHALT_OE = r_halt_drive;
 assign nBGACK_OE = r_bgack_drive;
 assign nBR_OE = r_br_drive;
 assign nBG_OE = r_bg_drive;
-assign nUDS_OE = r_uds_drive_read | r_uds_drive_write;
-assign nLDS_OE = r_lds_drive_read | r_lds_drive_write;
-assign nAS_OE = r_as_drive;
-assign RnW_OE = r_rw_drive;
 
 (* async_reg = "true" *) reg [15:0] mc_clk_long;
 
@@ -223,6 +223,71 @@ reg mc_clk_rising;
 reg mc_clk_falling;
 reg mc_clk_latch;
 reg mc_clk_latch_p1;
+
+(* async_reg = "true" *) reg r7_as_drive;
+(* async_reg = "true" *) reg r7_lds_drive;
+(* async_reg = "true" *) reg r7_uds_drive;
+(* async_reg = "true" *) reg r7_as_ds_clear;
+(* async_reg = "true" *) reg r7_rw_drive;
+(* async_reg = "true" *) reg r7_rw_clear;
+
+DLatch UDS(
+    .OUT(nUDS_OE),
+    .SET(r7_lds_drive),
+    .RESET(r7_as_ds_clear)
+);
+
+DLatch LDS(
+    .OUT(nLDS_OE),
+    .SET(r7_uds_drive),
+    .RESET(r7_as_ds_clear)
+);
+
+DLatch AS(
+    .OUT(nAS_OE),
+    .SET(r7_as_drive),
+    .RESET(r7_as_ds_clear)
+);
+
+DLatch RW(
+    .OUT(RnW_OE),
+    .SET(r7_rw_drive),
+    .RESET(r7_rw_clear)
+);
+
+always @(posedge CLK_7M) begin
+    if (r_lds_drive_read | r_lds_drive_write)
+        r7_lds_drive <= 1'b1;
+    else
+        r7_lds_drive <= 1'b0;
+        
+    if (r_uds_drive_read | r_uds_drive_write)
+        r7_uds_drive <= 1'b1;
+    else
+        r7_uds_drive <= 1'b0;
+    
+    if (r_as_drive)
+        r7_as_drive <= 1'b1;
+    else
+        r7_as_drive <= 1'b0;
+    
+    if (r_rw_drive)
+        r7_rw_drive <= 1'b1;
+    else
+        r7_rw_drive <= 1'b0;
+end
+
+always @(negedge CLK_7M) begin
+    if (r_as_ds_clear)
+        r7_as_ds_clear <= 1'b1;
+    else
+        r7_as_ds_clear <= 1'b0;      
+        
+    if (r_rw_clear)
+        r7_rw_clear <= 1'b1;
+    else
+        r7_rw_clear <= 1'b0;      
+end
 
 always @(negedge sys_clk) begin
     mc_clk_long <= { mc_clk_long[14:0], CLK_7M };
@@ -370,6 +435,8 @@ always @(posedge sys_clk) begin
         
         STATE_S0:
         begin
+            r_as_ds_clear <= 1'b0;
+            r_rw_clear <= 1'b0;
             r_dbus <= r_data_write[high_word];
             state <= STATE_S1;
         end
@@ -380,8 +447,6 @@ always @(posedge sys_clk) begin
             r_abus_drive <= 1'b1;
             r_fc_drive <= 1'b1;
 
-            // On rising clk edge go to S2
-            if (mc_clk_rising) begin           
                 // Assert address strobe
                 r_as_drive <= 1'b1;
 
@@ -391,6 +456,10 @@ always @(posedge sys_clk) begin
                 // When entering S2 in read mode, drive LDS/UDS
                 r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
                 r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
+                
+            // On rising clk edge go to S2
+            if (mc_clk_rising) begin           
+            
 
                 state <= STATE_S2;
             end
@@ -407,17 +476,22 @@ always @(posedge sys_clk) begin
         begin
             r_dbus_drive <= ~r_is_read;
             
+            r_lds_drive_write <= ~r_is_read & (r_size[0] | r_abus[0]);
+            r_uds_drive_write <= ~r_is_read & (r_size[0] | ~r_abus[0]);
+                
             if (mc_clk_rising) begin
                 state <= STATE_S4;
                 
-                r_lds_drive_write <= ~r_is_read & (r_size[0] | r_abus[0]);
-                r_uds_drive_write <= ~r_is_read & (r_size[0] | ~r_abus[0]);
+                
             end
         end
         
         STATE_S4:
         begin
             // Allthough S4 state, sample DTACK on falling edge
+            // NOTE:
+            // in pseudoasynchronous mode DTACK is allowed to change up to
+            // 90 nanoseconds before data is valid!
             if (mc_clk_falling) begin
                 if (dtack_sync == 1'b0) begin
                     state <= STATE_S5;
@@ -444,11 +518,15 @@ always @(posedge sys_clk) begin
                 req_active <= r_size[1];
             end
             if (mc_clk_falling) begin    
+                r_as_ds_clear <= 1'b1;
                 r_as_drive <= 1'b0;
                 r_lds_drive_read <= 1'b0;
                 r_lds_drive_write <= 1'b0;
                 r_uds_drive_read <= 1'b0;
                 r_uds_drive_write <= 1'b0;
+                
+                r_rw_clear <= 1'b0;
+                
                 if (r_size == 'd3)
                     state <= STATE_S7_S0;
                 else

@@ -11,26 +11,114 @@
 
 # PLL Constraints
 ################# 8.333 (120 MHz), 7.143 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
-create_clock -period 7.1429 [get_ports {SYS_PLL_CLKOUT0}]
-create_clock -period 140 [get_ports {CLK_7M}]
+create_clock -period 7.1429 SYS_PLL_CLKOUT0
 
+# 68000 bus clock
+####################
+create_clock -period 140 CLK_7M
+
+# Setup and hold times from report
+set_clock_latency -source -setup 1.907 [get_ports CLK_7M]
+set_clock_latency -source -hold 0.734 [get_ports CLK_7M]
+
+# both clocks are asynchronous
 set_clock_groups -asynchronous -group {SYS_PLL_CLKOUT0} -group {CLK_7M}
+
+# 68000 bus constraints
+####################
+# LDS, UDS, AS: min 3 max 25 ns
+set_output_delay -clock CLK_7M -min 4.927 [get_ports {nLDS_OE}]
+set_output_delay -clock CLK_7M -max 30.010 [get_ports {nLDS_OE}]
+set_output_delay -clock CLK_7M -min 4.777 [get_ports {nUDS_OE}]
+set_output_delay -clock CLK_7M -max 29.620 [get_ports {nUDS_OE}]
+set_output_delay -clock CLK_7M -min 4.777 [get_ports {nAS_OE}]
+set_output_delay -clock CLK_7M -max 29.620 [get_ports {nAS_OE}]
+
+# RnW: min 0 max 25 ns
+set_output_delay -clock CLK_7M -min 1.777 [get_ports {RnW_OE}]
+set_output_delay -clock CLK_7M -max 29.620 [get_ports {RnW_OE}]
+
+# FC[2:0]: min 0 max 25 ns
+set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[0]}]
+set_output_delay -clock CLK_7M -max 27.990 [get_ports {FC_OE[0]}]
+set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[1]}]
+set_output_delay -clock CLK_7M -max 27.990 [get_ports {FC_OE[1]}]
+set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[2]}]
+set_output_delay -clock CLK_7M -max 27.990 [get_ports {FC_OE[2]}]
+
+# Shifting and widening windows - multicycle paths
+# req_data_read[0] - TXN busy is cleared one cycle later so sampling window is 2 cycles
+set_multicycle_path -setup 2 -to [get_cells req_data_read[0]*]
+set_multicycle_path -hold 1 -to [get_cells req_data_read[0]*]
+
+# req_data_read[1] - second cycle needs some setup from Pi before reading value,
+# so more freedom is granted
+set_multicycle_path -setup 5 -to [get_cells req_data_read[1]*]
+set_multicycle_path -hold 4 -to [get_cells req_data_read[1]*]
+
+# r_address_p2 is used almost 500ns after r_address. Give it a lot of time.
+set_multicycle_path -setup 25 -to [get_cells r_address_p2*]
+set_multicycle_path -hold 24 -to [get_cells r_address_p2*]
+
+# A_OUT, D_OUT can settle for long time
+set_multicycle_path -setup 4 -to [get_cells A_OUT*]
+set_multicycle_path -hold 3 -to [get_cells A_OUT*]
+set_multicycle_path -setup 4 -to [get_cells D_OUT*]
+set_multicycle_path -hold 3 -to [get_cells D_OUT*]
+set_multicycle_path -setup 4 -to [get_cells r_abus*]
+set_multicycle_path -hold 3 -to [get_cells r_abus*]
+
+#set_multicycle_path -setup 3 -to [get_cells r_uds_drive*]
+#set_multicycle_path -hold 2 -to [get_cells r_uds_drive*]
+#set_multicycle_path -setup 3 -to [get_cells r_lds_drive*]
+#set_multicycle_path -hold 2 -to [get_cells r_lds_drive*]
+#set_multicycle_path -setup 3 -to [get_cells r_as_drive]
+#set_multicycle_path -hold 2 -to [get_cells r_as_drive]
+#set_multicycle_path -setup 3 -to [get_cells r_as_ds_clear]
+#set_multicycle_path -hold 2 -to [get_cells r_as_ds_clear]
 
 # False paths
 ####################
 
-set_false_path -from [get_ports {PI_GPIO_IN* D_IN*}]
-set_false_path -to [get_ports {PI_GPIO_OUT* A_OUT* D_OUT*}]
-#set_false_path -to [get_cells r_address_p2*]
+set_false_path -from [get_ports {PI_GPIO_IN*}]
+set_false_path -to [get_ports {PI_GPIO_OUT*}]
+set_false_path -to [get_pins [get_cells PI_GPIO_OUT*]|CE]
+#set_false_path -to [get_ports A_OE*]
+#set_false_path -to [get_ports D_OE*]
+
+set_false_path -to [get_cells r_address_p2*]
 
 # GPIO Constraints
 ####################
 
-set_multicycle_path 2 -setup -to [get_cells req_data_read*]
-set_multicycle_path 2 -setup -to [get_cells A_OUT*]
-set_multicycle_path 2 -setup -to [get_cells D_OUT*]
-set_multicycle_path 2 -setup -to [get_cells D_OE*]
-set_multicycle_path 2 -setup -from [get_cells D_IN*]
+#set_multicycle_path 2 -setup -to [get_cells req_data_read*]
+#set_multicycle_path 3 -hold -to [get_cells req_data_read*]
+#set_multicycle_path 3 -setup -to [get_cells A_OUT*]
+#set_multicycle_path 3 -hold -to [get_cells A_OUT*]
+#set_multicycle_path 3 -setup -to [get_cells D_OUT*]
+#set_multicycle_path 3 -hold -to [get_cells D_OUT*]
+
+#set_multicycle_path 2 -setup -to [get_cells r_abus*]
+#set_multicycle_path 2 -setup -to [get_cells r_dbus*]
+
+#set_multicycle_path 2 -hold -to [get_cells r_abus*]
+#set_multicycle_path 2 -hold -to [get_cells r_dbus*]
+
+#set_multicycle_path 2 -setup -to [get_cells r_address_p2*]
+#set_multicycle_path 2 -hold -to [get_cells r_address_p2*]
+
+#et_multicycle_path 2 -setup -to [get_cells D_OE*]
+#et_multicycle_path 2 -hold -to [get_cells D_OE*]
+#set_multicycle_path 2 -setup -to [get_cells A_OE*]
+#et_multicycle_path 2 -setup -from [get_ports D_IN*]
+#et_multicycle_path 2 -hold -from [get_ports D_IN*]
+
+#set_output_delay -clock CLK_7M -min -10 [get_ports {ECLK}]
+#set_output_delay -clock CLK_7M -max 10 [get_ports {ECLK}]
+#set_output_delay -clock SYS_PLL_CLKOUT0 4 [get_ports A_OUT*]
+#set_output_delay -clock SYS_PLL_CLKOUT0 4 [get_ports A_OUT*]
+#set_output_delay -clock SYS_PLL_CLKOUT0 4 [get_ports A_OE*]
+#set_output_delay -clock SYS_PLL_CLKOUT0 4 [get_ports A_OE*]
 
 #set_output_delay -clock MCCLK -min 0 [get_ports {A_OUT*}]
 #set_output_delay -clock MCCLK -max 3 [get_ports {A_OUT*}]
