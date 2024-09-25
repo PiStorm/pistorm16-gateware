@@ -26,25 +26,25 @@ set_clock_groups -asynchronous -group {SYS_PLL_CLKOUT0} -group {CLK_7M}
 
 # 68000 bus constraints
 ####################
-# LDS, UDS, AS: min 3 max 25 ns
+# LDS, UDS, AS: min 3 max 25 ns. /* max reduced to 5 ns... */
 set_output_delay -clock CLK_7M -min 4.927 [get_ports {nLDS_OE}]
-set_output_delay -clock CLK_7M -max 30.010 [get_ports {nLDS_OE}]
+set_output_delay -clock CLK_7M -max 10.010 [get_ports {nLDS_OE}]
 set_output_delay -clock CLK_7M -min 4.777 [get_ports {nUDS_OE}]
-set_output_delay -clock CLK_7M -max 29.620 [get_ports {nUDS_OE}]
+set_output_delay -clock CLK_7M -max 9.620 [get_ports {nUDS_OE}]
 set_output_delay -clock CLK_7M -min 4.777 [get_ports {nAS_OE}]
-set_output_delay -clock CLK_7M -max 29.620 [get_ports {nAS_OE}]
+set_output_delay -clock CLK_7M -max 9.620 [get_ports {nAS_OE}]
 
-# RnW: min 0 max 25 ns
+# RnW: min 0 max 25 ns. /* max reduced to 5 ns... */
 set_output_delay -clock CLK_7M -min 1.777 [get_ports {RnW_OE}]
-set_output_delay -clock CLK_7M -max 29.620 [get_ports {RnW_OE}]
+set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
 
-# FC[2:0]: min 0 max 25 ns
-set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[0]}]
-set_output_delay -clock CLK_7M -max 27.990 [get_ports {FC_OE[0]}]
-set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[1]}]
-set_output_delay -clock CLK_7M -max 27.990 [get_ports {FC_OE[1]}]
-set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[2]}]
-set_output_delay -clock CLK_7M -max 27.990 [get_ports {FC_OE[2]}]
+# FC[2:0]: min 0 max 25 ns. /* max reduced to 5 ns... */
+#set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[0]}]
+#set_output_delay -clock CLK_7M -max 7.990 [get_ports {FC_OE[0]}]
+#set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[1]}]
+#set_output_delay -clock CLK_7M -max 7.990 [get_ports {FC_OE[1]}]
+#set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[2]}]
+#set_output_delay -clock CLK_7M -max 7.990 [get_ports {FC_OE[2]}]
 
 # Shifting and widening windows - multicycle paths
 # req_data_read[0] - TXN busy is cleared one cycle later so sampling window is 2 cycles
@@ -80,7 +80,7 @@ set_multicycle_path -hold 3 -to [get_cells r_abus*]
 # False paths
 ####################
 
-set_false_path -from [get_ports {PI_GPIO_IN*}]
+#set_false_path -from [get_ports {PI_GPIO_IN*}]
 set_false_path -to [get_ports {PI_GPIO_OUT*}]
 set_false_path -to [get_pins [get_cells PI_GPIO_OUT*]|CE]
 #set_false_path -to [get_ports A_OE*]

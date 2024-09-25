@@ -231,6 +231,18 @@ reg mc_clk_latch_p1;
 (* async_reg = "true" *) reg r7_rw_drive;
 (* async_reg = "true" *) reg r7_rw_clear;
 
+(* async_reg = "true" *) reg [1:0] r_fb_uds;
+(* async_reg = "true" *) reg [1:0] r_fb_lds;
+(* async_reg = "true" *) reg [1:0] r_fb_as;
+(* async_reg = "true" *) reg [1:0] r_fb_rw;
+
+always @(posedge sys_clk) begin
+    r_fb_uds <= { r_fb_uds[0], nUDS_OE };
+    r_fb_lds <= { r_fb_lds[0], nLDS_OE };
+    r_fb_as  <= { r_fb_as[0],  nAS_OE };
+    r_fb_rw  <= { r_fb_rw[0],  RnW_OE };
+end
+
 DLatch UDS(
     .OUT(nUDS_OE),
     .SET(r7_lds_drive),
@@ -256,12 +268,12 @@ DLatch RW(
 );
 
 always @(posedge CLK_7M) begin
-    if (r_lds_drive_read | r_lds_drive_write)
+    if (r_lds_drive_read || r_lds_drive_write)
         r7_lds_drive <= 1'b1;
     else
         r7_lds_drive <= 1'b0;
         
-    if (r_uds_drive_read | r_uds_drive_write)
+    if (r_uds_drive_read || r_uds_drive_write)
         r7_uds_drive <= 1'b1;
     else
         r7_uds_drive <= 1'b0;
@@ -338,7 +350,7 @@ reg [1:0] req_size;
 reg req_terminated_normally;
 reg is_bm;
 reg [15:0] req_data_read [0:1];
-reg [31:0] req_data_write [0:1];
+reg [15:0] req_data_write [0:1];
 reg [23:0] req_address;
 reg [23:0] r_address_p2;
 
@@ -417,6 +429,21 @@ always @(posedge sys_clk) begin
         endcase
     end
     
+    if (r_fb_rw[1] == 0) r_rw_clear <= 1'b0;
+    else if (r_fb_rw[1] == 1) r_rw_drive <= 1'b0;
+
+    if (r_fb_as[1] == 1)  r_as_drive <= 1'b0;
+    if (r_fb_lds[1] == 1) begin 
+        r_lds_drive_read <= 1'b0; 
+        r_lds_drive_write <= 1'b0; 
+    end
+    if (r_fb_uds[1] == 1) begin
+        r_uds_drive_read <= 1'b0;
+        r_uds_drive_write <= 1'b0;
+    end
+    
+    if (r_fb_as[1]  == 0/* && r_fb_lds[1] == 0 && r_fb_uds[1] == 0*/) r_as_ds_clear <= 1'b0;
+
     case (state) // synthesis full_case
         STATE_WAIT:
         begin
@@ -435,8 +462,6 @@ always @(posedge sys_clk) begin
         
         STATE_S0:
         begin
-            r_as_ds_clear <= 1'b0;
-            r_rw_clear <= 1'b0;
             r_dbus <= r_data_write[high_word];
             state <= STATE_S1;
         end
@@ -447,20 +472,18 @@ always @(posedge sys_clk) begin
             r_abus_drive <= 1'b1;
             r_fc_drive <= 1'b1;
 
-                // Assert address strobe
-                r_as_drive <= 1'b1;
+            // Assert address strobe
+            r_as_drive <= 1'b1;
 
-                // Drive RW low (for write) or high (for read)
-                r_rw_drive <= ~r_is_read;
-                
-                // When entering S2 in read mode, drive LDS/UDS
-                r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
-                r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
-                
+            // Drive RW low (for write) or high (for read)
+            r_rw_drive <= ~r_is_read;
+            
+            // When entering S2 in read mode, drive LDS/UDS
+            r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
+            r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
+
             // On rising clk edge go to S2
             if (mc_clk_rising) begin           
-            
-
                 state <= STATE_S2;
             end
         end
@@ -478,7 +501,7 @@ always @(posedge sys_clk) begin
             
             r_lds_drive_write <= ~r_is_read & (r_size[0] | r_abus[0]);
             r_uds_drive_write <= ~r_is_read & (r_size[0] | ~r_abus[0]);
-                
+
             if (mc_clk_rising) begin
                 state <= STATE_S4;
                 
@@ -519,13 +542,7 @@ always @(posedge sys_clk) begin
             end
             if (mc_clk_falling) begin    
                 r_as_ds_clear <= 1'b1;
-                r_as_drive <= 1'b0;
-                r_lds_drive_read <= 1'b0;
-                r_lds_drive_write <= 1'b0;
-                r_uds_drive_read <= 1'b0;
-                r_uds_drive_write <= 1'b0;
-                
-                r_rw_clear <= 1'b0;
+                r_rw_clear <= 1'b1;
                 
                 if (r_size == 'd3)
                     state <= STATE_S7_S0;
@@ -538,14 +555,13 @@ always @(posedge sys_clk) begin
         begin
             r_abus_drive <= 1'b0;
             r_dbus_drive <= 1'b0;
-            r_rw_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
-            
+            high_word <= 'b0;
+
             if (mc_clk_rising) begin
                 r_abus <= r_address_p2;
                 r_size <= 2'b01;
-                high_word <= 'b0;
                 state <= STATE_S0;
             end
         end
@@ -554,7 +570,6 @@ always @(posedge sys_clk) begin
         begin
             r_abus_drive <= 1'b0;
             r_dbus_drive <= 1'b0;
-            r_rw_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
             state <= STATE_WAIT;
