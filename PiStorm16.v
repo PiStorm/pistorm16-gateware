@@ -245,13 +245,13 @@ end
 
 DLatch UDS(
     .OUT(nUDS_OE),
-    .SET(r7_lds_drive),
+    .SET(r7_uds_drive),
     .RESET(r7_as_ds_clear)
 );
 
 DLatch LDS(
     .OUT(nLDS_OE),
-    .SET(r7_uds_drive),
+    .SET(r7_lds_drive),
     .RESET(r7_as_ds_clear)
 );
 
@@ -418,7 +418,7 @@ always @(posedge sys_clk) begin
                 req_read <= pi_data_in[10];
                 req_fc <= pi_data_in[13:11];
                 req_active <= 1'b1;
-                high_word = pi_data_in[9];
+                high_word <= pi_data_in[9];
             end
             PI_REG_CONTROL: begin
                 if (pi_data_in[15]) begin
@@ -478,12 +478,11 @@ always @(posedge sys_clk) begin
             // Drive RW low (for write) or high (for read)
             r_rw_drive <= ~r_is_read;
             
-            // When entering S2 in read mode, drive LDS/UDS
-            r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
-
             // On rising clk edge go to S2
             if (mc_clk_rising) begin           
+                // When entering S2 in read mode, drive LDS/UDS
+                r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
+                r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
                 state <= STATE_S2;
             end
         end
