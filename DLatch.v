@@ -8,6 +8,7 @@
 module DLatch(
     input wire SET,
     input wire RESET,
+    input wire CLK,
     output reg OUT
 );
 
@@ -19,3 +20,34 @@ always @(*) begin
 end
 
 endmodule
+
+
+module FFLatch(
+    input wire SET,
+    input wire RESET,
+    input wire CLK,
+    output reg OUT
+);
+
+reg clear;
+wire clocked_reset = RESET & clear;
+
+always @(posedge CLK or posedge clocked_reset) begin
+    if (clocked_reset)
+        OUT <= 1'b0;
+    else if (CLK && SET)
+        OUT <= 1'b1;
+end
+
+always @(negedge CLK) begin
+    if (RESET)
+        clear <= 1'b1;
+    else
+        clear <= 1'b0; 
+end
+
+
+
+
+endmodule
+

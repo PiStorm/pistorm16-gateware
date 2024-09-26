@@ -10,8 +10,8 @@
 # Timing Model: C3 (final)
 
 # PLL Constraints
-################# 8.333 (120 MHz), 7.143 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
-create_clock -period 7.1429 SYS_PLL_CLKOUT0
+################# 8.333 (120 MHz), 7.1429 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
+create_clock -period 6.6667 SYS_PLL_CLKOUT0
 
 # 68000 bus clock
 ####################
@@ -34,9 +34,18 @@ set_output_delay -clock CLK_7M -max 9.620 [get_ports {nUDS_OE}]
 set_output_delay -clock CLK_7M -min 4.777 [get_ports {nAS_OE}]
 set_output_delay -clock CLK_7M -max 9.620 [get_ports {nAS_OE}]
 
+#set_output_delay -clock CLK_7M -clock_fall -min 4.927 [get_ports {nLDS_OE}] -add_delay
+#set_output_delay -clock CLK_7M -clock_fall -max 10.010 [get_ports {nLDS_OE}] -add_delay
+#set_output_delay -clock CLK_7M -clock_fall -min 4.777 [get_ports {nUDS_OE}] -add_delay
+#set_output_delay -clock CLK_7M -clock_fall -max 9.620 [get_ports {nUDS_OE}] -add_delay
+#set_output_delay -clock CLK_7M -clock_fall -min 4.777 [get_ports {nAS_OE}] -add_delay
+#set_output_delay -clock CLK_7M -clock_fall -max 9.620 [get_ports {nAS_OE}] -add_delay
+
 # RnW: min 0 max 25 ns. /* max reduced to 5 ns... */
 set_output_delay -clock CLK_7M -min 1.777 [get_ports {RnW_OE}]
 set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
+#set_output_delay -clock CLK_7M -clock_fall -min 1.777 [get_ports {RnW_OE}] -add_delay
+#set_output_delay -clock CLK_7M -clock_fall -max 9.620 [get_ports {RnW_OE}] -add_delay
 
 # FC[2:0]: min 0 max 25 ns. /* max reduced to 5 ns... */
 #set_output_delay -clock CLK_7M -min 1.150 [get_ports {FC_OE[0]}]
@@ -63,8 +72,14 @@ set_multicycle_path -hold 24 -to [get_cells r_address_p2*]
 # A_OUT, D_OUT can settle for long time
 set_multicycle_path -setup 4 -to [get_cells A_OUT*]
 set_multicycle_path -hold 3 -to [get_cells A_OUT*]
+set_multicycle_path -setup 4 -to [get_cells A_OE*]
+set_multicycle_path -hold 3 -to [get_cells A_OE*]
 set_multicycle_path -setup 4 -to [get_cells D_OUT*]
 set_multicycle_path -hold 3 -to [get_cells D_OUT*]
+set_multicycle_path -setup 4 -to [get_cells D_OE*]
+set_multicycle_path -hold 3 -to [get_cells D_OE*]
+set_multicycle_path -setup 4 -to [get_cells FC_OE*]
+set_multicycle_path -hold 3 -to [get_cells FC_OE*]
 set_multicycle_path -setup 4 -to [get_cells r_abus*]
 set_multicycle_path -hold 3 -to [get_cells r_abus*]
 
@@ -72,14 +87,17 @@ set_multicycle_path -setup 3 -to [get_cells r_uds_drive*]
 set_multicycle_path -hold 2 -to [get_cells r_uds_drive*]
 set_multicycle_path -setup 3 -to [get_cells r_lds_drive*]
 set_multicycle_path -hold 2 -to [get_cells r_lds_drive*]
-set_multicycle_path -setup 3 -to [get_cells r_as_drive]
-set_multicycle_path -hold 2 -to [get_cells r_as_drive]
-set_multicycle_path -setup 3 -to [get_cells r_as_ds_clear]
-set_multicycle_path -hold 2 -to [get_cells r_as_ds_clear]
-set_multicycle_path -setup 3 -to [get_cells r_rw_drive]
-set_multicycle_path -hold 2 -to [get_cells r_rw_drive]
-set_multicycle_path -setup 3 -to [get_cells r_rw_clear]
-set_multicycle_path -hold 2 -to [get_cells r_rw_clear]
+set_multicycle_path -setup 3 -to [get_cells r_as_drive*]
+set_multicycle_path -hold 2 -to [get_cells r_as_drive*]
+set_multicycle_path -setup 3 -to [get_cells r_as_ds_clear*]
+set_multicycle_path -hold 2 -to [get_cells r_as_ds_clear*]
+set_multicycle_path -setup 3 -to [get_cells r_rw_drive*]
+set_multicycle_path -hold 2 -to [get_cells r_rw_drive*]
+set_multicycle_path -setup 3 -to [get_cells r_rw_clear*]
+set_multicycle_path -hold 2 -to [get_cells r_rw_clear*]
+
+set_multicycle_path -setup 3 -to [get_cells second_cycle*]
+set_multicycle_path -hold 2 -to [get_cells second_cycle*]
 
 # False paths
 ####################
@@ -87,10 +105,11 @@ set_multicycle_path -hold 2 -to [get_cells r_rw_clear]
 #set_false_path -from [get_ports {PI_GPIO_IN*}]
 set_false_path -to [get_ports {PI_GPIO_OUT*}]
 set_false_path -to [get_pins [get_cells PI_GPIO_OUT*]|CE]
-#set_false_path -to [get_ports A_OE*]
-#set_false_path -to [get_ports D_OE*]
 
-set_false_path -to [get_cells r_address_p2*]
+# r_* registers  drive the *_OE outputs directly, do not clock-analyze it
+set_false_path -from [get_cells r_*drive*] -to [get_cells *_OE*]
+set_false_path -from [get_cells r_*clear*] -to [get_cells *_OE*]
+set_false_path -from [get_cells r_*clear*] -to [get_cells */clear*]
 
 # GPIO Constraints
 ####################

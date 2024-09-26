@@ -217,20 +217,6 @@ assign nBGACK_OE = r_bgack_drive;
 assign nBR_OE = r_br_drive;
 assign nBG_OE = r_bg_drive;
 
-(* async_reg = "true" *) reg [15:0] mc_clk_long;
-
-reg mc_clk_rising;
-reg mc_clk_falling;
-reg mc_clk_latch;
-reg mc_clk_latch_p1;
-
-(* async_reg = "true" *) reg r7_as_drive;
-(* async_reg = "true" *) reg r7_lds_drive;
-(* async_reg = "true" *) reg r7_uds_drive;
-(* async_reg = "true" *) reg r7_as_ds_clear;
-(* async_reg = "true" *) reg r7_rw_drive;
-(* async_reg = "true" *) reg r7_rw_clear;
-
 (* async_reg = "true" *) reg [1:0] r_fb_uds;
 (* async_reg = "true" *) reg [1:0] r_fb_lds;
 (* async_reg = "true" *) reg [1:0] r_fb_as;
@@ -243,63 +229,42 @@ always @(posedge sys_clk) begin
     r_fb_rw  <= { r_fb_rw[0],  RnW_OE };
 end
 
-DLatch UDS(
+FFLatch UDS(
     .OUT(nUDS_OE),
-    .SET(r7_uds_drive),
-    .RESET(r7_as_ds_clear)
+    .SET(r_uds_drive_read | r_uds_drive_write),
+    .CLK(CLK_7M),
+    .RESET(r_as_ds_clear)
 );
 
-DLatch LDS(
+FFLatch LDS(
     .OUT(nLDS_OE),
-    .SET(r7_lds_drive),
-    .RESET(r7_as_ds_clear)
+    .SET(r_lds_drive_read | r_lds_drive_write),
+    .CLK(CLK_7M),
+    .RESET(r_as_ds_clear)
 );
 
-DLatch AS(
+FFLatch AS(
     .OUT(nAS_OE),
-    .SET(r7_as_drive),
-    .RESET(r7_as_ds_clear)
+    .SET(r_as_drive),
+    .CLK(CLK_7M),
+    .RESET(r_as_ds_clear)
 );
 
-DLatch RW(
+FFLatch RW(
     .OUT(RnW_OE),
-    .SET(r7_rw_drive),
-    .RESET(r7_rw_clear)
+    .SET(r_rw_drive),
+    .CLK(CLK_7M),
+    .RESET(r_rw_clear)
 );
 
-always @(posedge CLK_7M) begin
-    if (r_lds_drive_read || r_lds_drive_write)
-        r7_lds_drive <= 1'b1;
-    else
-        r7_lds_drive <= 1'b0;
-        
-    if (r_uds_drive_read || r_uds_drive_write)
-        r7_uds_drive <= 1'b1;
-    else
-        r7_uds_drive <= 1'b0;
-    
-    if (r_as_drive)
-        r7_as_drive <= 1'b1;
-    else
-        r7_as_drive <= 1'b0;
-    
-    if (r_rw_drive)
-        r7_rw_drive <= 1'b1;
-    else
-        r7_rw_drive <= 1'b0;
-end
+// Clock synchronizer
+/*
+(* async_reg = "true" *) reg [15:0] mc_clk_long;
 
-always @(negedge CLK_7M) begin
-    if (r_as_ds_clear)
-        r7_as_ds_clear <= 1'b1;
-    else
-        r7_as_ds_clear <= 1'b0;      
-        
-    if (r_rw_clear)
-        r7_rw_clear <= 1'b1;
-    else
-        r7_rw_clear <= 1'b0;      
-end
+reg mc_clk_rising;
+reg mc_clk_falling;
+reg mc_clk_latch;
+reg mc_clk_latch_p1;
 
 always @(negedge sys_clk) begin
     mc_clk_long <= { mc_clk_long[14:0], CLK_7M };
@@ -324,6 +289,22 @@ always @(negedge sys_clk) begin
         end
     endcase
 end
+*/
+
+wire mc_clk_rising;
+wire mc_clk_falling;
+wire mc_clk_latch;
+wire mc_clk_latch_p1;
+
+ClockSync CLKSync(
+    .SYSCLK(sys_clk),
+    .DTACK(dtack_sync),
+    .MCCLK(CLK_7M),
+    .MCCLK_RISING(mc_clk_rising),
+    .MCCLK_FALLING(mc_clk_falling),
+    .DTACK_LATCH(mc_clk_latch),
+    .DTACK_AFTER_LATCH(mc_clk_latch_p1)
+);
 
 // ## Pi interface.
 localparam [2:0] PI_REG_DATA_LO = 3'd0;
