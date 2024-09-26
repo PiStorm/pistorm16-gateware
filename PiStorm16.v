@@ -82,8 +82,7 @@ module PiStorm16(
         
     // PLL
     input wire SYS_PLL_CLKOUT0,
-    input wire IN_CLK_50M,
-    input wire SYS_PLL_LOCKED
+    input wire IN_CLK_50M
 );
 
 // EClock generator
@@ -266,11 +265,17 @@ reg mc_clk_falling;
 reg mc_clk_latch;
 reg mc_clk_latch_p1;
 
+parameter DTACK_DELAY = 15;
+
+(* async_reg = "true" *) reg [DTACK_DELAY:0] dtack_delay_line;
+
 always @(negedge sys_clk) begin
     mc_clk_long <= { mc_clk_long[14:0], CLK_7M };
+    dtack_delay_line <= {dtack_delay_line[DTACK_DELAY-1:0], DTACK};
     
     // The values for latch, rising and falling detector from shift register are matched
-    // for 140 MHz sys_clk
+    // for 140 MHz sys_clk*/
+/*
     case (mc_clk_long[7:6])
         2'b10: mc_clk_rising <= 1'b1;
         2'b01: mc_clk_falling <= 1'b1;
@@ -279,13 +284,22 @@ always @(negedge sys_clk) begin
             mc_clk_falling <= 1'b0;
         end
     endcase
-    
-    case (mc_clk_long[4:2])
-        3'b001: mc_clk_latch <= 1'b1;
-        3'b011: mc_clk_latch_p1 <= 1'b1;
+*/ /*
+    case (mc_clk_long[1:0])
+        2'b01: mc_clk_rising <= 1'b1;
+        2'b10: mc_clk_falling <= 1'b1;
         default: begin
-            mc_clk_latch <= 1'b0;
-            mc_clk_latch_p1 <= 1'b0;
+            mc_clk_rising <= 1'b0;
+            mc_clk_falling <= 1'b0;
+        end    
+    endcase
+    
+    case (dtack_delay_line[DTACK_DELAY:DTACK_DELAY-2]) // synthesis full_case
+        3'b110: DTACK_LATCH <= 1'b1;
+        3'b100: DTACK_AFTER_LATCH <= 1'b1;
+        default: begin
+            MCCLK_RISING <= 1'b0;
+            DTACK_AFTER_LATCH <= 1'b0;
         end
     endcase
 end
@@ -298,7 +312,7 @@ wire mc_clk_latch_p1;
 
 ClockSync CLKSync(
     .SYSCLK(sys_clk),
-    .DTACK(dtack_sync),
+    .DTACK(nDTACK),
     .MCCLK(CLK_7M),
     .MCCLK_RISING(mc_clk_rising),
     .MCCLK_FALLING(mc_clk_falling),
@@ -511,6 +525,8 @@ always @(posedge sys_clk) begin
         
         STATE_S6:
         begin
+            r_as_ds_clear <= 1'b1;
+            r_rw_clear <= 1'b1;
             if (mc_clk_latch) begin
                 if (r_is_read) begin
                     req_data_read[high_word] <= din_sync;
@@ -521,9 +537,6 @@ always @(posedge sys_clk) begin
                 req_active <= r_size[1];
             end
             if (mc_clk_falling) begin    
-                r_as_ds_clear <= 1'b1;
-                r_rw_clear <= 1'b1;
-                
                 if (r_size == 'd3)
                     state <= STATE_S7_S0;
                 else
