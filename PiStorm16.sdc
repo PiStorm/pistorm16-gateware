@@ -57,54 +57,54 @@ set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
 
 # Shifting and widening windows - multicycle paths
 # req_data_read[0] - TXN busy is cleared one cycle later so sampling window is 2 cycles
-set_multicycle_path -setup 2 -to [get_cells req_data_read[0]*]
-set_multicycle_path -hold 1 -to [get_cells req_data_read[0]*]
+#set_multicycle_path -setup 2 -to [get_cells req_data_read[0]*]
+#set_multicycle_path -hold 1 -to [get_cells req_data_read[0]*]
 
 # req_data_read[1] - second cycle needs some setup from Pi before reading value,
 # so more freedom is granted
-set_multicycle_path -setup 5 -to [get_cells req_data_read[1]*]
-set_multicycle_path -hold 4 -to [get_cells req_data_read[1]*]
+#set_multicycle_path -setup 5 -to [get_cells req_data_read[1]*]
+#set_multicycle_path -hold 4 -to [get_cells req_data_read[1]*]
 
 # r_address_p2 is used almost 500ns after r_address. Give it a lot of time.
-set_multicycle_path -setup 25 -to [get_cells r_address_p2*]
-set_multicycle_path -hold 24 -to [get_cells r_address_p2*]
+#set_multicycle_path -setup 25 -to [get_cells r_address_p2*]
+#set_multicycle_path -hold 24 -to [get_cells r_address_p2*]
 
 # A_OUT, D_OUT can settle for long time
-set_multicycle_path -setup 4 -to [get_cells A_OUT*]
-set_multicycle_path -hold 3 -to [get_cells A_OUT*]
-set_multicycle_path -setup 4 -to [get_cells A_OE*]
-set_multicycle_path -hold 3 -to [get_cells A_OE*]
-set_multicycle_path -setup 4 -to [get_cells D_OUT*]
-set_multicycle_path -hold 3 -to [get_cells D_OUT*]
-set_multicycle_path -setup 4 -to [get_cells D_OE*]
-set_multicycle_path -hold 3 -to [get_cells D_OE*]
-set_multicycle_path -setup 4 -to [get_cells FC_OE*]
-set_multicycle_path -hold 3 -to [get_cells FC_OE*]
-set_multicycle_path -setup 4 -to [get_cells r_abus*]
-set_multicycle_path -hold 3 -to [get_cells r_abus*]
+#set_multicycle_path -setup 4 -to [get_cells A_OUT*]
+#set_multicycle_path -hold 3 -to [get_cells A_OUT*]
+#set_multicycle_path -setup 4 -to [get_cells A_OE*]
+#set_multicycle_path -hold 3 -to [get_cells A_OE*]
+#set_multicycle_path -setup 4 -to [get_cells D_OUT*]
+#set_multicycle_path -hold 3 -to [get_cells D_OUT*]
+#set_multicycle_path -setup 4 -to [get_cells D_OE*]
+#set_multicycle_path -hold 3 -to [get_cells D_OE*]
+#set_multicycle_path -setup 4 -to [get_cells FC_OE*]
+#set_multicycle_path -hold 3 -to [get_cells FC_OE*]
+#set_multicycle_path -setup 2 -to [get_cells r_abus*]
+#set_multicycle_path -hold 1 -to [get_cells r_abus*]
 
-set_multicycle_path -setup 3 -to [get_cells r_uds_drive*]
-set_multicycle_path -hold 2 -to [get_cells r_uds_drive*]
-set_multicycle_path -setup 3 -to [get_cells r_lds_drive*]
-set_multicycle_path -hold 2 -to [get_cells r_lds_drive*]
-set_multicycle_path -setup 3 -to [get_cells r_as_drive*]
-set_multicycle_path -hold 2 -to [get_cells r_as_drive*]
-set_multicycle_path -setup 3 -to [get_cells r_as_ds_clear*]
-set_multicycle_path -hold 2 -to [get_cells r_as_ds_clear*]
-set_multicycle_path -setup 3 -to [get_cells r_rw_drive*]
-set_multicycle_path -hold 2 -to [get_cells r_rw_drive*]
-set_multicycle_path -setup 3 -to [get_cells r_rw_clear*]
-set_multicycle_path -hold 2 -to [get_cells r_rw_clear*]
+#set_multicycle_path -setup 3 -to [get_cells r_uds_drive*]
+#set_multicycle_path -hold 2 -to [get_cells r_uds_drive*]
+#set_multicycle_path -setup 3 -to [get_cells r_lds_drive*]
+#set_multicycle_path -hold 2 -to [get_cells r_lds_drive*]
+#set_multicycle_path -setup 3 -to [get_cells r_as_drive*]
+#set_multicycle_path -hold 2 -to [get_cells r_as_drive*]
+#set_multicycle_path -setup 3 -to [get_cells r_as_ds_clear*]
+#set_multicycle_path -hold 2 -to [get_cells r_as_ds_clear*]
+#set_multicycle_path -setup 3 -to [get_cells r_rw_drive*]
+#set_multicycle_path -hold 2 -to [get_cells r_rw_drive*]
+#set_multicycle_path -setup 3 -to [get_cells r_rw_clear*]
+#set_multicycle_path -hold 2 -to [get_cells r_rw_clear*]
 
-set_multicycle_path -setup 3 -to [get_cells second_cycle*]
-set_multicycle_path -hold 2 -to [get_cells second_cycle*]
+#set_multicycle_path -setup 3 -to [get_cells second_cycle*]
+#set_multicycle_path -hold 2 -to [get_cells second_cycle*]
 
 # False paths
 ####################
 
 #set_false_path -from [get_ports {PI_GPIO_IN*}]
-set_false_path -to [get_ports {PI_GPIO_OUT*}]
-set_false_path -to [get_pins [get_cells PI_GPIO_OUT*]|CE]
+#set_false_path -to [get_ports {PI_GPIO_OUT*}]
+#set_false_path -to [get_pins [get_cells PI_GPIO_OUT*]|CE]
 
 # r_* registers  drive the *_OE outputs directly, do not clock-analyze it
 set_false_path -from [get_cells r_*drive*] -to [get_cells *_OE*]

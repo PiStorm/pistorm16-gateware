@@ -126,7 +126,6 @@ always @(posedge sys_clk) begin
     dtack_sync <= nDTACK;
     berr_n_sync <= nBERR;
     halt_sync <= nHALT_IN;
-
     din_sync <= D_IN;
 
     if (mc_clk_falling) begin
@@ -473,11 +472,12 @@ always @(posedge sys_clk) begin
             // Drive RW low (for write) or high (for read)
             r_rw_drive <= ~r_is_read;
             
+            // When entering S2 in read mode, drive LDS/UDS
+            r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
+            r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
+            
             // On rising clk edge go to S2
-            if (mc_clk_rising) begin           
-                // When entering S2 in read mode, drive LDS/UDS
-                r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
-                r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
+            if (r_fb_as[1]) begin                
                 state <= STATE_S2;
             end
         end
@@ -536,7 +536,7 @@ always @(posedge sys_clk) begin
                 second_cycle <= 1'b1;
                 req_active <= r_size[1];
             end
-            if (mc_clk_falling) begin    
+            if (!r_fb_as[1]) begin    
                 if (r_size == 'd3)
                     state <= STATE_S7_S0;
                 else
@@ -565,7 +565,9 @@ always @(posedge sys_clk) begin
             r_dbus_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
-            state <= STATE_WAIT;
+            if (mc_clk_rising) begin
+                state <= STATE_WAIT;
+            end
         end
     endcase
 end

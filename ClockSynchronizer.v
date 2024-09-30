@@ -7,7 +7,7 @@
 
 module ClockSync
 #(
-    parameter DTACK_DELAY = 20
+    parameter DTACK_DELAY = 18
 )
 (
     input wire SYSCLK,
@@ -43,7 +43,7 @@ begin
         dtack_delay_line[i] <= dtack_delay_line[i-1];
     end
     
-    if (dtack_delay_line[DTACK_DELAY-2] && !dtack_delay_line[DTACK_DELAY-3])
+    if (dtack_delay_line[DTACK_DELAY-3] && !dtack_delay_line[DTACK_DELAY-4])
         DTACK_LATCH <= 1'b1;
     else
         DTACK_LATCH <= 1'b0;
