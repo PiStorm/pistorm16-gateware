@@ -46,8 +46,22 @@ always @(negedge CLK) begin
         clear <= 1'b0; 
 end
 
+endmodule
 
 
+module FFLatchPR(
+    input wire SET,
+    input wire RESET,
+    input wire CLK,
+    output reg OUT
+);
+
+always @(posedge CLK) begin
+    if (SET)
+        OUT <= 1'b1;
+    else if (RESET)
+        OUT <= 1'b0;
+end
 
 endmodule
 

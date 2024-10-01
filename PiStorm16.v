@@ -120,13 +120,14 @@ end
 (* async_reg = "true" *) reg halt_sync;
 (* async_reg = "true" *) reg dtack_sync;
 (* async_reg = "true" *) reg berr_n_sync;
-(* async_reg = "true" *) reg [15:0] din_sync;
+(* async_reg = "true" *) reg [15:0] din_sync[0:1];
 
 always @(posedge sys_clk) begin
     dtack_sync <= nDTACK;
     berr_n_sync <= nBERR;
     halt_sync <= nHALT_IN;
-    din_sync <= D_IN;
+    din_sync[1] <= din_sync[0];
+    din_sync[0] <= D_IN;
 
     if (mc_clk_falling) begin
         reset_sync <= nRESET_IN;
@@ -161,7 +162,7 @@ reg [15:0] pi_data_out;
 assign PI_GPIO_OUT[23:8] = pi_data_out;
 
 // Data out from FPGA to Pi is driven on read requests only (WR=1, RD=0)
-wire drive_pi_data_out = !PI_RD && PI_WR;
+wire drive_pi_data_out = ~PI_RD & PI_WR;
 assign PI_GPIO_OE[23:8] = {16{drive_pi_data_out}};
 
 // Data from Pi to FPGA is read on the same port inputs
@@ -248,7 +249,7 @@ FFLatch AS(
     .RESET(r_as_ds_clear)
 );
 
-FFLatch RW(
+FFLatchPR RW(
     .OUT(RnW_OE),
     .SET(r_rw_drive),
     .CLK(CLK_7M),
@@ -304,19 +305,15 @@ always @(negedge sys_clk) begin
 end
 */
 
-wire mc_clk_rising;
 wire mc_clk_falling;
 wire mc_clk_latch;
-wire mc_clk_latch_p1;
 
 ClockSync CLKSync(
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
-    .MCCLK_RISING(mc_clk_rising),
     .MCCLK_FALLING(mc_clk_falling),
-    .DTACK_LATCH(mc_clk_latch),
-    .DTACK_AFTER_LATCH(mc_clk_latch_p1)
+    .DTACK_LATCH(mc_clk_latch)
 );
 
 // ## Pi interface.
@@ -343,8 +340,8 @@ reg second_cycle;
 reg [1:0] req_size;
 reg req_terminated_normally;
 reg is_bm;
-reg [15:0] req_data_read [0:1];
-reg [15:0] req_data_write [0:1];
+reg [31:0] req_data_read;
+reg [31:0] req_data_write;
 reg [23:0] req_address;
 reg [23:0] r_address_p2;
 
@@ -357,12 +354,12 @@ assign D_OUT = r_dbus[15:0];
 assign A_OUT = r_abus[23:1];
 assign FC_OUT = req_fc;
 
-reg [15:0] r_data_write [0:1];
+reg [31:0] r_data_write;
 
 always @(*) begin
     case (PI_A)
-        PI_REG_DATA_LO: pi_data_out = req_data_read[0];
-        PI_REG_DATA_HI: pi_data_out = req_data_read[1];
+        PI_REG_DATA_LO: pi_data_out = req_data_read[15:0];
+        PI_REG_DATA_HI: pi_data_out = req_data_read[31:16];
         PI_REG_ADDR_LO: pi_data_out = req_address[15:0];
         PI_REG_ADDR_HI: pi_data_out = {2'd0, req_fc, req_read, req_size, req_address[23:16]};
         PI_REG_STATUS: pi_data_out = pi_status;
@@ -373,28 +370,22 @@ end
 
 // Synchronize WR command from Pi
 (* async_reg = "true" *) reg [1:0] pi_wr_sync;
-reg pi_wr_falling;
+wire pi_wr_falling = (pi_wr_sync == 2'b10);
+wire pi_wr_rising = (pi_wr_sync == 2'b01);
 
-always @(posedge sys_clk) begin
+always @(negedge sys_clk) begin
     pi_wr_sync <= { pi_wr_sync[0], PI_WR };
-
-    if (pi_wr_sync == 2'b10)
-        pi_wr_falling <= 1'b1;
-    else
-        pi_wr_falling <= 1'b0;
 end
 
 // ## Access state machine.
-localparam [8:0] STATE_WAIT  = 'b000000000;
-localparam [8:0] STATE_S0    = 'b000000001;
-localparam [8:0] STATE_S1    = 'b000000010;
-localparam [8:0] STATE_S2    = 'b000000100;
-localparam [8:0] STATE_S3    = 'b000001000;
-localparam [8:0] STATE_S4    = 'b000010000;
-localparam [8:0] STATE_S5    = 'b000100000;
-localparam [8:0] STATE_S6    = 'b001000000;
-localparam [8:0] STATE_S7    = 'b010000000;
-localparam [8:0] STATE_S7_S0 = 'b100000000;
+localparam [8:0] STATE_WAIT         = 'b000000000;
+localparam [8:0] STATE_SETUP_BUS    = 'b000000001;
+localparam [8:0] STATE_DRIVE_AS     = 'b000000010;
+localparam [8:0] STATE_DRIVE_DS     = 'b000000100;
+localparam [8:0] STATE_WAIT_DSACK   = 'b000001000;
+localparam [8:0] STATE_ON_DSACK     = 'b000010000;
+localparam [8:0] STATE_CONTINUE     = 'b000100000;
+localparam [8:0] STATE_FINALIZE     = 'b001000000;
 
 reg [8:0] state = STATE_WAIT;
 reg high_word;
@@ -403,8 +394,8 @@ reg high_word;
 always @(posedge sys_clk) begin
     if (pi_wr_falling) begin
         case (PI_A) // synthesis full_case
-            PI_REG_DATA_LO: req_data_write[0] <= pi_data_in;
-            PI_REG_DATA_HI: req_data_write[1] <= pi_data_in;
+            PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
+            PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
             PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
             PI_REG_ADDR_HI: begin
                 req_address[23:16] <= pi_data_in[7:0];
@@ -412,7 +403,6 @@ always @(posedge sys_clk) begin
                 req_read <= pi_data_in[10];
                 req_fc <= pi_data_in[13:11];
                 req_active <= 1'b1;
-                high_word <= pi_data_in[9];
             end
             PI_REG_CONTROL: begin
                 if (pi_data_in[15]) begin
@@ -421,8 +411,8 @@ always @(posedge sys_clk) begin
                     pi_control <= pi_control & ~pi_data_in[14:0];
             end
         endcase
-    end
-    
+    end 
+
     if (r_fb_rw[1] == 0) r_rw_clear <= 1'b0;
     else if (r_fb_rw[1] == 1) r_rw_drive <= 1'b0;
 
@@ -445,27 +435,29 @@ always @(posedge sys_clk) begin
             if (req_active) begin
                 r_size <= req_size;
                 r_is_read <= req_read;
-                r_abus <= req_address[23:0];
+                r_abus <= req_address;
                 r_address_p2 <= req_address + 24'd2;
-                r_data_write[0] <= req_data_write[0];
-                r_data_write[1] <= req_data_write[1];
+                r_data_write <= req_data_write;
+                high_word <= req_size[1];
                 second_cycle <= 1'b0;
-                state <= STATE_S0;
+                state <= STATE_SETUP_BUS;
             end
         end
         
-        STATE_S0:
+        // Setup bus is combination of S0 and S1 - prepare data on D/A/FC and go to driving address strobe
+        STATE_SETUP_BUS:
         begin
-            r_dbus <= r_data_write[high_word];
-            state <= STATE_S1;
-        end
-        
-        STATE_S1:
-        begin
-            // drive address bus in S1 
+            if (high_word) r_dbus <= r_data_write[31:16];
+            else r_dbus <= r_data_write[15:0];
+
             r_abus_drive <= 1'b1;
             r_fc_drive <= 1'b1;
-
+            state <= STATE_DRIVE_AS;
+        end
+        
+        // Drive address strobe and wait until it actually toggled. This happens in 7.14 MHz clock domain
+        STATE_DRIVE_AS:
+        begin
             // Assert address strobe
             r_as_drive <= 1'b1;
 
@@ -478,94 +470,72 @@ always @(posedge sys_clk) begin
             
             // On rising clk edge go to S2
             if (r_fb_as[1]) begin                
-                state <= STATE_S2;
+                state <= STATE_DRIVE_DS;
             end
         end
         
-        STATE_S2:
-        begin
-            if (mc_clk_falling) begin
-                state <= STATE_S3;
-            end
-        end
-        
-        STATE_S3:
+        // If write this is the second place where LDS/UDS can be driven
+        STATE_DRIVE_DS:
         begin
             r_dbus_drive <= ~r_is_read;
             
             r_lds_drive_write <= ~r_is_read & (r_size[0] | r_abus[0]);
             r_uds_drive_write <= ~r_is_read & (r_size[0] | ~r_abus[0]);
 
-            if (mc_clk_rising) begin
-                state <= STATE_S4;
-                
-                
-            end
+            state <= STATE_WAIT_DSACK;
         end
-        
-        STATE_S4:
+
+        // Wait for DSACK and latch data (if read)
+        STATE_WAIT_DSACK:
         begin
-            // Allthough S4 state, sample DTACK on falling edge
-            // NOTE:
-            // in pseudoasynchronous mode DTACK is allowed to change up to
-            // 90 nanoseconds before data is valid!
-            if (mc_clk_falling) begin
-                if (dtack_sync == 1'b0) begin
-                    state <= STATE_S5;
+            if (mc_clk_latch) begin
+                if (r_is_read) begin
+                    if (high_word) req_data_read[31:16] <= din_sync[1];
+                    else req_data_read[15:0] <= din_sync[1];
                 end
+                state <= STATE_ON_DSACK;
             end
         end
         
-        STATE_S5:
-        begin
-            if (mc_clk_rising) begin
-                state <= STATE_S6;
-            end
-        end
-        
-        STATE_S6:
+        // On DSACK (delayed) select next cycle and deassert AS/LDS/UDS/RnW
+        STATE_ON_DSACK:
         begin
             r_as_ds_clear <= 1'b1;
             r_rw_clear <= 1'b1;
-            if (mc_clk_latch) begin
-                if (r_is_read) begin
-                    req_data_read[high_word] <= din_sync;
+
+            if (!r_fb_as[1]) begin
+                if (r_size == 'd3) begin
+                    second_cycle <= 1'b1;
+                    state <= STATE_CONTINUE;
+                end
+                else begin
+                    req_active <= 1'b0; 
+                    state <= STATE_FINALIZE;
                 end
             end
-            if (mc_clk_latch_p1) begin
-                second_cycle <= 1'b1;
-                req_active <= r_size[1];
-            end
-            if (!r_fb_as[1]) begin    
-                if (r_size == 'd3)
-                    state <= STATE_S7_S0;
-                else
-                    state <= STATE_S7;
-            end
         end
-
-        STATE_S7_S0:
+        
+        STATE_CONTINUE:
         begin
-            r_abus_drive <= 1'b0;
-            r_dbus_drive <= 1'b0;
-            r_vma_drive <= 1'b0;
-            r_fc_drive <= 1'b0;
-            high_word <= 'b0;
-
-            if (mc_clk_rising) begin
+            if (dtack_sync) begin
+                r_abus_drive <= 1'b0;
+                r_dbus_drive <= 1'b0;
+                r_vma_drive <= 1'b0;
+                r_fc_drive <= 1'b0;
+                high_word <= 'b0;
                 r_abus <= r_address_p2;
                 r_size <= 2'b01;
-                state <= STATE_S0;
+                state <= STATE_SETUP_BUS;
             end
         end
 
-        STATE_S7:
-        begin
-            r_abus_drive <= 1'b0;
-            r_dbus_drive <= 1'b0;
-            r_vma_drive <= 1'b0;
-            r_fc_drive <= 1'b0;
-            if (mc_clk_rising) begin
+        STATE_FINALIZE:
+        begin           
+            if (dtack_sync) begin
+                r_abus_drive <= 1'b0;
+                r_dbus_drive <= 1'b0;
+                r_vma_drive <= 1'b0;
+                r_fc_drive <= 1'b0;
                 state <= STATE_WAIT;
             end
         end

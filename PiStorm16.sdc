@@ -57,13 +57,11 @@ set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
 
 # Shifting and widening windows - multicycle paths
 # req_data_read[0] - TXN busy is cleared one cycle later so sampling window is 2 cycles
-#set_multicycle_path -setup 2 -to [get_cells req_data_read[0]*]
-#set_multicycle_path -hold 1 -to [get_cells req_data_read[0]*]
+#set_multicycle_path -setup 2 -to [get_cells req_data_read*]
+#set_multicycle_path -hold 1 -to [get_cells req_data_read*]
 
-# req_data_read[1] - second cycle needs some setup from Pi before reading value,
-# so more freedom is granted
-#set_multicycle_path -setup 5 -to [get_cells req_data_read[1]*]
-#set_multicycle_path -hold 4 -to [get_cells req_data_read[1]*]
+#set_multicycle_path -setup 5 -to [get_cells req_data_write*]
+#set_multicycle_path -hold 4 -to [get_cells req_data_write*]
 
 # r_address_p2 is used almost 500ns after r_address. Give it a lot of time.
 #set_multicycle_path -setup 25 -to [get_cells r_address_p2*]
@@ -107,9 +105,9 @@ set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
 #set_false_path -to [get_pins [get_cells PI_GPIO_OUT*]|CE]
 
 # r_* registers  drive the *_OE outputs directly, do not clock-analyze it
-set_false_path -from [get_cells r_*drive*] -to [get_cells *_OE*]
-set_false_path -from [get_cells r_*clear*] -to [get_cells *_OE*]
-set_false_path -from [get_cells r_*clear*] -to [get_cells */clear*]
+#set_false_path -from [get_cells r_*drive*] -to [get_cells *_OE*]
+#set_false_path -from [get_cells r_*clear*] -to [get_cells *_OE*]
+#set_false_path -from [get_cells r_*clear*] -to [get_cells */clear*]
 
 # GPIO Constraints
 ####################
