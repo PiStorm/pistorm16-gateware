@@ -306,6 +306,7 @@ end
 */
 
 wire mc_clk_falling;
+wire mc_clk_rising;
 wire mc_clk_latch;
 
 ClockSync CLKSync(
@@ -313,6 +314,7 @@ ClockSync CLKSync(
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
     .MCCLK_FALLING(mc_clk_falling),
+    .MCCLK_RISING(mc_clk_rising),
     .DTACK_LATCH(mc_clk_latch)
 );
 
@@ -452,6 +454,7 @@ always @(posedge sys_clk) begin
 
             r_abus_drive <= 1'b1;
             r_fc_drive <= 1'b1;
+            
             state <= STATE_DRIVE_AS;
         end
         
@@ -502,7 +505,7 @@ always @(posedge sys_clk) begin
         begin
             r_as_ds_clear <= 1'b1;
             r_rw_clear <= 1'b1;
-
+            
             if (!r_fb_as[1]) begin
                 if (r_size == 'd3) begin
                     second_cycle <= 1'b1;
@@ -517,7 +520,7 @@ always @(posedge sys_clk) begin
         
         STATE_CONTINUE:
         begin
-            if (dtack_sync) begin
+            if (mc_clk_rising) begin
                 r_abus_drive <= 1'b0;
                 r_dbus_drive <= 1'b0;
                 r_vma_drive <= 1'b0;
@@ -531,7 +534,7 @@ always @(posedge sys_clk) begin
 
         STATE_FINALIZE:
         begin           
-            if (dtack_sync) begin
+            if (mc_clk_rising) begin
                 r_abus_drive <= 1'b0;
                 r_dbus_drive <= 1'b0;
                 r_vma_drive <= 1'b0;

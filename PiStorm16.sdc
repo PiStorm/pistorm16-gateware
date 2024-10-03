@@ -60,12 +60,12 @@ set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
 #set_multicycle_path -setup 2 -to [get_cells req_data_read*]
 #set_multicycle_path -hold 1 -to [get_cells req_data_read*]
 
-#set_multicycle_path -setup 5 -to [get_cells req_data_write*]
-#set_multicycle_path -hold 4 -to [get_cells req_data_write*]
+set_multicycle_path -setup 2 -to [get_cells req_data_write*]
+set_multicycle_path -hold 1 -to [get_cells req_data_write*]
 
 # r_address_p2 is used almost 500ns after r_address. Give it a lot of time.
-#set_multicycle_path -setup 25 -to [get_cells r_address_p2*]
-#set_multicycle_path -hold 24 -to [get_cells r_address_p2*]
+set_multicycle_path -setup 25 -to [get_cells r_address_p2*]
+set_multicycle_path -hold 24 -to [get_cells r_address_p2*]
 
 # A_OUT, D_OUT can settle for long time
 #set_multicycle_path -setup 4 -to [get_cells A_OUT*]
