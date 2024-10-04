@@ -10,8 +10,8 @@
 # Timing Model: C3 (final)
 
 # PLL Constraints
-################# 8.333 (120 MHz), 7.1429 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
-create_clock -period 8.333 SYS_PLL_CLKOUT0
+################# 8.333 (120 MHz), 7.5188 (133 MHz), 7.1429 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
+create_clock -period 6.994 SYS_PLL_CLKOUT0
 
 # 68000 bus clock
 ####################

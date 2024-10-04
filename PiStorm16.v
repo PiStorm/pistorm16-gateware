@@ -258,7 +258,12 @@ wire mc_clk_falling;
 wire mc_clk_rising;
 wire mc_clk_latch;
 
-ClockSync #(.DTACK_DELAY(15)) CLKSync (
+/*  Frequency   DTACK_DELAY
+     120 MHz        15
+     133 MHz        16
+     143 MHz        18
+*/
+ClockSync #(.DTACK_DELAY(18)) CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
@@ -494,6 +499,8 @@ always @(posedge sys_clk) begin
                 state <= STATE_WAIT;
             end
         end
+        
+        default: state <= STATE_WAIT;
     endcase
 end
 
