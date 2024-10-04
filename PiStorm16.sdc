@@ -11,7 +11,7 @@
 
 # PLL Constraints
 ################# 8.333 (120 MHz), 7.5188 (133 MHz), 7.1429 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
-create_clock -period 6.994 SYS_PLL_CLKOUT0
+create_clock -period 6.993 SYS_PLL_CLKOUT0
 
 # 68000 bus clock
 ####################
@@ -60,8 +60,8 @@ set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
 #set_multicycle_path -setup 2 -to [get_cells req_data_read*]
 #set_multicycle_path -hold 1 -to [get_cells req_data_read*]
 
-set_multicycle_path -setup 2 -to [get_cells req_data_write*]
-set_multicycle_path -hold 1 -to [get_cells req_data_write*]
+#set_multicycle_path -setup 2 -to [get_cells req_data_write*]
+#set_multicycle_path -hold 1 -to [get_cells req_data_write*]
 
 # r_address_p2 is used almost 500ns after r_address. Give it a lot of time.
 set_multicycle_path -setup 25 -to [get_cells r_address_p2*]
