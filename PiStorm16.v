@@ -342,6 +342,7 @@ localparam [8:0] STATE_WAIT_DSACK   = 'b000001000;
 localparam [8:0] STATE_ON_DSACK     = 'b000010000;
 localparam [8:0] STATE_CONTINUE     = 'b000100000;
 localparam [8:0] STATE_FINALIZE     = 'b001000000;
+localparam [8:0] STATE_CLEAR_AS     = 'b010000000;
 
 reg [8:0] state = STATE_WAIT;
 reg high_word;
@@ -452,20 +453,23 @@ always @(posedge sys_clk) begin
                     if (high_word) req_data_read[31:16] <= din_sync[1];
                     else req_data_read[15:0] <= din_sync[1];
                 end
-                state <= STATE_ON_DSACK;               
+                state <= STATE_CLEAR_AS;
             end
+        end
+        
+        STATE_CLEAR_AS:
+        begin
+            r_as_ds_clear <= 1'b1;
+            r_rw_clear <= 1'b1;
+            second_cycle <= 1'b1;
+            req_active <= r_size[1];
+            state <= STATE_ON_DSACK;
         end
         
         // On DSACK (delayed) select next cycle and deassert AS/LDS/UDS/RnW
         STATE_ON_DSACK:
         begin
-            r_as_ds_clear <= 1'b1;
-            r_rw_clear <= 1'b1;
-            
             if (!r_fb_as[1]) begin
-                req_active <= r_size[1];
-                second_cycle <= 1'b1;
-                
                 if (r_size[1]) begin
                     state <= STATE_CONTINUE;
                 end
