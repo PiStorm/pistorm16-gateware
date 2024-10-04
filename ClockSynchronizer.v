@@ -11,7 +11,7 @@
 
 module ClockSync
 #(
-    parameter DTACK_DELAY = 17
+    parameter DTACK_DELAY = 15
 )
 (
     input wire SYSCLK,
@@ -22,8 +22,8 @@ module ClockSync
     output reg DTACK_LATCH
 );
 
-(* async_reg = "true" *) reg [1:0] mc_clk_long;
-(* async_reg = "true" *) reg [DTACK_DELAY:0] dtack_delay_line;
+reg [1:0] mc_clk_long;
+reg [DTACK_DELAY-1:0] dtack_delay_line;
 
 always @(negedge SYSCLK)
 begin
@@ -32,12 +32,9 @@ begin
     MCCLK_FALLING <= (mc_clk_long == 2'b10) ? 1'b1 : 1'b0;
     MCCLK_RISING <= (mc_clk_long == 2'b01) ? 1'b1 : 1'b0;
     
-    dtack_delay_line <= {dtack_delay_line[DTACK_DELAY-1:0], DTACK};
+    dtack_delay_line <= {dtack_delay_line[DTACK_DELAY-2:0], DTACK};
     
-    case(dtack_delay_line[DTACK_DELAY:DTACK_DELAY-2])
-        3'b110, 3'b100: DTACK_LATCH <= 1'b1;
-        default:        DTACK_LATCH <= 1'b0;
-    endcase
+    DTACK_LATCH <= ~(dtack_delay_line[DTACK_DELAY-1] | DTACK);
 end
 
 endmodule

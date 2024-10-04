@@ -200,10 +200,8 @@ reg r_vma_drive;
 reg r_bgack_drive;
 reg r_rw_drive;
 reg r_rw_clear;
-reg r_lds_drive_read;
-reg r_uds_drive_read;
-reg r_lds_drive_write;
-reg r_uds_drive_write;
+reg r_lds_drive;
+reg r_uds_drive;
 reg r_uds_clear;
 reg r_lds_clear;
 reg r_as_ds_clear;
@@ -230,14 +228,14 @@ end
 
 FFLatch UDS(
     .OUT(nUDS_OE),
-    .SET(r_uds_drive_read | r_uds_drive_write),
+    .SET(r_uds_drive),
     .CLK(CLK_7M),
     .RESET(r_as_ds_clear)
 );
 
 FFLatch LDS(
     .OUT(nLDS_OE),
-    .SET(r_lds_drive_read | r_lds_drive_write),
+    .SET(r_lds_drive),
     .CLK(CLK_7M),
     .RESET(r_as_ds_clear)
 );
@@ -256,60 +254,11 @@ FFLatchPR RW(
     .RESET(r_rw_clear)
 );
 
-// Clock synchronizer
-/*
-(* async_reg = "true" *) reg [15:0] mc_clk_long;
-
-reg mc_clk_rising;
-reg mc_clk_falling;
-reg mc_clk_latch;
-reg mc_clk_latch_p1;
-
-parameter DTACK_DELAY = 15;
-
-(* async_reg = "true" *) reg [DTACK_DELAY:0] dtack_delay_line;
-
-always @(negedge sys_clk) begin
-    mc_clk_long <= { mc_clk_long[14:0], CLK_7M };
-    dtack_delay_line <= {dtack_delay_line[DTACK_DELAY-1:0], DTACK};
-    
-    // The values for latch, rising and falling detector from shift register are matched
-    // for 140 MHz sys_clk*/
-/*
-    case (mc_clk_long[7:6])
-        2'b10: mc_clk_rising <= 1'b1;
-        2'b01: mc_clk_falling <= 1'b1;
-        default: begin
-            mc_clk_rising <= 1'b0;
-            mc_clk_falling <= 1'b0;
-        end
-    endcase
-*/ /*
-    case (mc_clk_long[1:0])
-        2'b01: mc_clk_rising <= 1'b1;
-        2'b10: mc_clk_falling <= 1'b1;
-        default: begin
-            mc_clk_rising <= 1'b0;
-            mc_clk_falling <= 1'b0;
-        end    
-    endcase
-    
-    case (dtack_delay_line[DTACK_DELAY:DTACK_DELAY-2]) // synthesis full_case
-        3'b110: DTACK_LATCH <= 1'b1;
-        3'b100: DTACK_AFTER_LATCH <= 1'b1;
-        default: begin
-            MCCLK_RISING <= 1'b0;
-            DTACK_AFTER_LATCH <= 1'b0;
-        end
-    endcase
-end
-*/
-
 wire mc_clk_falling;
 wire mc_clk_rising;
 wire mc_clk_latch;
 
-ClockSync CLKSync(
+ClockSync #(.DTACK_DELAY(15)) CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
@@ -415,20 +364,15 @@ always @(posedge sys_clk) begin
         endcase
     end 
 
-    if (r_fb_rw[1] == 0) r_rw_clear <= 1'b0;
-    else if (r_fb_rw[1] == 1) r_rw_drive <= 1'b0;
+    if (r_fb_rw[1]) r_rw_drive <= 1'b0;
+    else            r_rw_clear <= 1'b0;
 
-    if (r_fb_as[1] == 1)  r_as_drive <= 1'b0;
-    if (r_fb_lds[1] == 1) begin 
-        r_lds_drive_read <= 1'b0; 
-        r_lds_drive_write <= 1'b0; 
-    end
-    if (r_fb_uds[1] == 1) begin
-        r_uds_drive_read <= 1'b0;
-        r_uds_drive_write <= 1'b0;
-    end
+    if (r_fb_as[1]) r_as_drive <= 1'b0;
+    else            r_as_ds_clear <= 1'b0;
     
-    if (r_fb_as[1]  == 0/* && r_fb_lds[1] == 0 && r_fb_uds[1] == 0*/) r_as_ds_clear <= 1'b0;
+    if (r_fb_lds[1]) r_lds_drive <= 1'b0; 
+    
+    if (r_fb_uds[1]) r_uds_drive <= 1'b0;
 
     case (state) // synthesis full_case
         STATE_WAIT:
@@ -468,8 +412,8 @@ always @(posedge sys_clk) begin
             r_rw_drive <= ~r_is_read;
             
             // When entering S2 in read mode, drive LDS/UDS
-            r_lds_drive_read <= r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive_read <= r_is_read & (r_size[0] | ~r_abus[0]);
+            r_lds_drive <= r_is_read & (r_size[0] | r_abus[0]);
+            r_uds_drive <= r_is_read & (r_size[0] | ~r_abus[0]);
             
             // On rising clk edge go to S2
             if (r_fb_as[1]) begin                
@@ -480,10 +424,17 @@ always @(posedge sys_clk) begin
         // If write this is the second place where LDS/UDS can be driven
         STATE_DRIVE_DS:
         begin
-            r_dbus_drive <= ~r_is_read;
+            if (!r_is_read) begin
+                r_dbus_drive <= 1'b1;
             
-            r_lds_drive_write <= ~r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive_write <= ~r_is_read & (r_size[0] | ~r_abus[0]);
+                r_lds_drive <= (r_size[0] | r_abus[0]);
+                r_uds_drive <= (r_size[0] | ~r_abus[0]);
+            end
+            
+            //r_dbus_drive <= ~r_is_read;
+            
+            //r_lds_drive <= ~r_is_read & (r_size[0] | r_abus[0]);
+            //r_uds_drive <= ~r_is_read & (r_size[0] | ~r_abus[0]);
 
             state <= STATE_WAIT_DSACK;
         end
@@ -496,7 +447,7 @@ always @(posedge sys_clk) begin
                     if (high_word) req_data_read[31:16] <= din_sync[1];
                     else req_data_read[15:0] <= din_sync[1];
                 end
-                state <= STATE_ON_DSACK;
+                state <= STATE_ON_DSACK;               
             end
         end
         
@@ -507,12 +458,13 @@ always @(posedge sys_clk) begin
             r_rw_clear <= 1'b1;
             
             if (!r_fb_as[1]) begin
-                if (r_size == 'd3) begin
-                    second_cycle <= 1'b1;
+                req_active <= r_size[1];
+                second_cycle <= 1'b1;
+                
+                if (r_size[1]) begin
                     state <= STATE_CONTINUE;
                 end
                 else begin
-                    req_active <= 1'b0; 
                     state <= STATE_FINALIZE;
                 end
             end
