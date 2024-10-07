@@ -415,6 +415,7 @@ always @(posedge sys_clk) begin
         begin
             //r_as_ds_clear <= 1'b1;
             //r_rw_clear <= 1'b1;
+            //r_control_drive <= 1'b0;
         end
         
         STATE_ACTIVATE:
@@ -506,7 +507,7 @@ always @(posedge sys_clk) begin
             r_dbus_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
-            r_control_drive <= 1'b0;
+            r_control_drive <= r_size[1];
         end
         
         STATE_CONTINUE:
@@ -514,7 +515,6 @@ always @(posedge sys_clk) begin
             high_word <= 'b0;
             r_abus <= r_address_p2;
             r_size <= 2'b01;
-            r_control_drive <= 1'b0;
         end
     endcase
 end
