@@ -271,12 +271,13 @@ wire mc_clk_rising;
 wire mc_clk_latch;
 wire mc_clk_latch_write;
 
-/*  Frequency   DTACK_DELAY
+/*  Frequency   DTACK_DELAY   DTACK_PROBED
      120 MHz        15
      133 MHz        16
      143 MHz        18
+     145 MHz        20             16
 */
-ClockSync #(.DTACK_DELAY(18)) CLKSync (
+ClockSync #(.DTACK_DELAY(16)) CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
