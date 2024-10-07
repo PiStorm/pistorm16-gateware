@@ -25,8 +25,6 @@ module ClockSync
 );
 
 reg [1:0] mc_clk_long;
-//reg [DTACK_DELAY-1:0] dtack_delay_line;
-
 reg [7:0] cnt;
 
 always @(negedge SYSCLK)
@@ -44,12 +42,6 @@ begin
         if (cnt < DTACK_DELAY) cnt <= cnt + 'd1;
         else DTACK_LATCH <= 1'b1;
     end 
-    /*
-    dtack_delay_line <= {dtack_delay_line[DTACK_DELAY-2:0], DTACK};
-    
-    DTACK_LATCH <= ~(dtack_delay_line[DTACK_DELAY-1] | DTACK);
-    DTACK_LATCH_WRITE <= ~(dtack_delay_line[1] | DTACK);
-    */
 end
 
 endmodule

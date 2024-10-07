@@ -276,7 +276,7 @@ wire mc_clk_latch_write;
      133 MHz        16
      143 MHz        18
 */
-ClockSync #(.DTACK_DELAY(13)) CLKSync (
+ClockSync #(.DTACK_DELAY(18)) CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
@@ -434,9 +434,6 @@ always @(posedge sys_clk) begin
         // Setup bus is combination of S0 and S1 - prepare data on D/A/FC and go to driving address strobe
         STATE_SETUP_BUS:
         begin
-            //if (high_word) r_dbus <= r_data_write[31:16];
-            //else r_dbus <= r_data_write[15:0];
-
             r_abus_drive <= 1'b1;
             r_fc_drive <= 1'b1;
         end
@@ -478,19 +475,15 @@ always @(posedge sys_clk) begin
             r_lds_drive <= 1'b0;
             r_uds_drive <= 1'b0;
             r_rw_drive <= 1'b0;
-            /*if (r_is_read) begin
-                if (high_word) req_data_read[31:16] <= D_IN;//din_sync[1];
-                else req_data_read[15:0] <= D_IN; //din_sync[1];
-            end*/
+
+            second_cycle <= 1'b1;
+            r_clear_req_active <= ~r_size[1];
         end
         
         STATE_CLEAR_AS:
         begin
             r_as_ds_clear <= 1'b1;
             r_rw_clear <= 1'b1;
-            second_cycle <= 1'b1;
-            
-            r_clear_req_active <= ~r_size[1];
         end
         
         // On DSACK (delayed) select next cycle and deassert AS/LDS/UDS/RnW
