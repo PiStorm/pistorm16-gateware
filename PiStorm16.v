@@ -201,10 +201,11 @@ assign TP19_OE = 0;
 assign TP20_OE = 0;
 
 // Pi control register.
-reg [14:0] pi_control = 14'b00000000000000;
+reg [14:0] pi_control = 15'b00000000000000;
 wire r_br_drive = pi_control[0];
 wire r_reset_drive = pi_control[1];
 wire r_halt_drive = pi_control[2];
+wire [7:0] r_dtack_delay = {1'b0, pi_control[14:8]};
 
 reg r_bg_drive;
 reg r_as_drive;
@@ -277,10 +278,11 @@ wire mc_clk_latch_write;
      143 MHz        18
      145 MHz        20             16
 */
-ClockSync #(.DTACK_DELAY(16)) CLKSync (
+ClockSync /*#(.DTACK_DELAY(16))*/ CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
+    .DTACK_DELAY(r_dtack_delay),
     .MCCLK_FALLING(mc_clk_falling),
     .MCCLK_RISING(mc_clk_rising),
     .DTACK_LATCH(mc_clk_latch),

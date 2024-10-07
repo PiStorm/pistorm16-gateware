@@ -11,13 +11,14 @@
 // maximum time after which data is valid after DTACK asserted is 90ns
 
 module ClockSync
-#(
+/*#(
     parameter DTACK_DELAY = 15
-)
+)*/
 (
     input wire SYSCLK,
     input wire DTACK,
     input wire MCCLK,
+    input wire [7:0] DTACK_DELAY,
     output reg MCCLK_FALLING,
     output reg MCCLK_RISING,
     output reg DTACK_LATCH,
