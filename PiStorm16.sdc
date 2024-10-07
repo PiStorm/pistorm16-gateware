@@ -11,7 +11,7 @@
 
 # PLL Constraints
 ################# 8.333 (120 MHz), 7.5188 (133 MHz), 7.1429 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
-create_clock -period 6.993 SYS_PLL_CLKOUT0
+create_clock -period 10 SYS_PLL_CLKOUT0
 
 # 68000 bus clock
 ####################
@@ -27,12 +27,12 @@ set_clock_groups -asynchronous -group {SYS_PLL_CLKOUT0} -group {CLK_7M}
 # 68000 bus constraints
 ####################
 # LDS, UDS, AS: min 3 max 25 ns. /* max reduced to 5 ns... */
-set_output_delay -clock CLK_7M -min 4.927 [get_ports {nLDS_OE}]
-set_output_delay -clock CLK_7M -max 10.010 [get_ports {nLDS_OE}]
-set_output_delay -clock CLK_7M -min 4.777 [get_ports {nUDS_OE}]
-set_output_delay -clock CLK_7M -max 9.620 [get_ports {nUDS_OE}]
-set_output_delay -clock CLK_7M -min 4.777 [get_ports {nAS_OE}]
-set_output_delay -clock CLK_7M -max 9.620 [get_ports {nAS_OE}]
+set_output_delay -clock CLK_7M -min 4.905 [get_ports {nLDS_OUT}]
+set_output_delay -clock CLK_7M -max 9.954 [get_ports {nLDS_OUT}]
+set_output_delay -clock CLK_7M -min 4.756 [get_ports {nUDS_OUT}]
+set_output_delay -clock CLK_7M -max 9.564 [get_ports {nUDS_OUT}]
+set_output_delay -clock CLK_7M -min 4.756 [get_ports {nAS_OUT}]
+set_output_delay -clock CLK_7M -max 9.564 [get_ports {nAS_OUT}]
 
 #set_output_delay -clock CLK_7M -clock_fall -min 4.927 [get_ports {nLDS_OE}] -add_delay
 #set_output_delay -clock CLK_7M -clock_fall -max 10.010 [get_ports {nLDS_OE}] -add_delay
@@ -42,8 +42,8 @@ set_output_delay -clock CLK_7M -max 9.620 [get_ports {nAS_OE}]
 #set_output_delay -clock CLK_7M -clock_fall -max 9.620 [get_ports {nAS_OE}] -add_delay
 
 # RnW: min 0 max 25 ns. /* max reduced to 5 ns... */
-set_output_delay -clock CLK_7M -min 1.777 [get_ports {RnW_OE}]
-set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
+set_output_delay -clock CLK_7M -min 1.756 [get_ports {RnW_OUT}]
+set_output_delay -clock CLK_7M -max 9.564 [get_ports {RnW_OUT}]
 #set_output_delay -clock CLK_7M -clock_fall -min 1.777 [get_ports {RnW_OE}] -add_delay
 #set_output_delay -clock CLK_7M -clock_fall -max 9.620 [get_ports {RnW_OE}] -add_delay
 
@@ -62,6 +62,9 @@ set_output_delay -clock CLK_7M -max 9.620 [get_ports {RnW_OE}]
 
 #set_multicycle_path -setup 2 -to [get_cells req_data_write*]
 #set_multicycle_path -hold 1 -to [get_cells req_data_write*]
+
+#set_multicycle_path -setup 2 -to [get_cells high_word*]
+#set_multicycle_path -hold 1 -to [get_cells high_word*]
 
 # r_address_p2 is used almost 500ns after r_address. Give it a lot of time.
 set_multicycle_path -setup 25 -to [get_cells r_address_p2*]
@@ -105,10 +108,14 @@ set_multicycle_path -hold 24 -to [get_cells r_address_p2*]
 #set_false_path -to [get_pins [get_cells PI_GPIO_OUT*]|CE]
 
 # r_* registers  drive the *_OE outputs directly, do not clock-analyze it
-#set_false_path -from [get_cells r_*drive*] -to [get_cells *_OE*]
-#set_false_path -from [get_cells r_*clear*] -to [get_cells *_OE*]
+#set_false_path -from [get_cells r_*drive*] -to [get_cells *_OUT*]
+#set_false_path -from [get_cells r_*clear*] -to [get_cells *_OUT*]
 #set_false_path -from [get_cells r_*clear*] -to [get_cells */clear*]
 
+#set_false_path -to [get_cells r_address_p2*]
+
+#set_false_path -from [get_pins [get_cells PI_GPIO_OUT*]|CLK] -to [get_pins [get_cells A_OUT*]|D]
+#set_false_path -from [get_pins [get_cells mc_clk_rising*]|CLK] -to [get_pins [get_cells A_OUT*]|D]
 # GPIO Constraints
 ####################
 

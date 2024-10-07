@@ -1,5 +1,5 @@
 `default_nettype none
- 
+
 module PiStorm16(
     // Amiga clock
     input wire CLK_7M,
@@ -21,13 +21,18 @@ module PiStorm16(
     
     // Read/Write
     output wire RnW_OE,
+    output wire RnW_OUT,
     
     // Address strobe
     output wire nAS_OE,
+    output wire nAS_OUT,
     
     // Lower/Upper byte on D active
     output wire nLDS_OE,
     output wire nUDS_OE,
+    
+    output wire nLDS_OUT,
+    output wire nUDS_OUT,
     
     input wire nDTACK,
     input wire nBERR,
@@ -84,6 +89,8 @@ module PiStorm16(
     input wire SYS_PLL_CLKOUT0,
     input wire IN_CLK_50M
 );
+
+`include "global.vh"
 
 // EClock generator
 EClock eclock(
@@ -178,10 +185,15 @@ assign PI_GPIO_OE[26:24] = 3'b000;
 reg r_fc_drive = 0;
 reg r_abus_drive = 0;
 reg r_dbus_drive = 0;
+reg r_control_drive = 0;
 
 assign FC_OE = {3{r_fc_drive}};
 assign D_OE = {16{r_dbus_drive}};
 assign A_OE = {23{r_abus_drive}};
+assign nLDS_OE = r_control_drive;
+assign nUDS_OE = r_control_drive;
+assign RnW_OE = r_control_drive;
+assign nAS_OE = r_control_drive;
 
 // Test pads
 assign TP_OE = 8'b0;
@@ -220,35 +232,35 @@ assign nBG_OE = r_bg_drive;
 (* async_reg = "true" *) reg [1:0] r_fb_rw;
 
 always @(posedge sys_clk) begin
-    r_fb_uds <= { r_fb_uds[0], nUDS_OE };
-    r_fb_lds <= { r_fb_lds[0], nLDS_OE };
-    r_fb_as  <= { r_fb_as[0],  nAS_OE };
-    r_fb_rw  <= { r_fb_rw[0],  RnW_OE };
+    r_fb_uds <= { r_fb_uds[0], ~nUDS_OUT };
+    r_fb_lds <= { r_fb_lds[0], ~nLDS_OUT };
+    r_fb_as  <= { r_fb_as[0],  ~nAS_OUT };
+    r_fb_rw  <= { r_fb_rw[0],  ~RnW_OUT };
 end
 
-FFLatch UDS(
-    .OUT(nUDS_OE),
+FFLatchN UDS(
+    .OUT(nUDS_OUT),
     .SET(r_uds_drive),
     .CLK(CLK_7M),
     .RESET(r_as_ds_clear)
 );
 
-FFLatch LDS(
-    .OUT(nLDS_OE),
+FFLatchN LDS(
+    .OUT(nLDS_OUT),
     .SET(r_lds_drive),
     .CLK(CLK_7M),
     .RESET(r_as_ds_clear)
 );
 
-FFLatch AS(
-    .OUT(nAS_OE),
+FFLatchN AS(
+    .OUT(nAS_OUT),
     .SET(r_as_drive),
     .CLK(CLK_7M),
     .RESET(r_as_ds_clear)
 );
 
-FFLatchPR RW(
-    .OUT(RnW_OE),
+FFLatchNPR RW(
+    .OUT(RnW_OUT),
     .SET(r_rw_drive),
     .CLK(CLK_7M),
     .RESET(r_rw_clear)
@@ -257,29 +269,22 @@ FFLatchPR RW(
 wire mc_clk_falling;
 wire mc_clk_rising;
 wire mc_clk_latch;
+wire mc_clk_latch_write;
 
 /*  Frequency   DTACK_DELAY
      120 MHz        15
      133 MHz        16
      143 MHz        18
 */
-ClockSync #(.DTACK_DELAY(18)) CLKSync (
+ClockSync #(.DTACK_DELAY(13)) CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
     .MCCLK_FALLING(mc_clk_falling),
     .MCCLK_RISING(mc_clk_rising),
-    .DTACK_LATCH(mc_clk_latch)
+    .DTACK_LATCH(mc_clk_latch),
+    .DTACK_LATCH_WRITE(mc_clk_latch_write)
 );
-
-// ## Pi interface.
-localparam [2:0] PI_REG_DATA_LO = 3'd0;
-localparam [2:0] PI_REG_DATA_HI = 3'd1;
-localparam [2:0] PI_REG_ADDR_LO = 3'd2;
-localparam [2:0] PI_REG_ADDR_HI = 3'd3;
-localparam [2:0] PI_REG_STATUS = 3'd4;
-localparam [2:0] PI_REG_CONTROL = 3'd4;
-localparam [2:0] PI_REG_VERSION = 3'd7;
 
 localparam [3:0] FW_MAJOR = 4'd1;
 localparam [3:0] FW_MINOR = 4'd0;
@@ -325,31 +330,18 @@ always @(*) begin
 end
 
 // Synchronize WR command from Pi
-(* async_reg = "true" *) reg [1:0] pi_wr_sync;
-wire pi_wr_falling = (pi_wr_sync == 2'b10);
-wire pi_wr_rising = (pi_wr_sync == 2'b01);
+reg pi_wr_a;
+reg pi_wr_b;
+//wire pi_wr_falling = (pi_wr_sync == 2'b10);
+//wire pi_wr_rising = (pi_wr_sync == 2'b01);
 
-always @(negedge sys_clk) begin
-    pi_wr_sync <= { pi_wr_sync[0], PI_WR };
-end
+reg pi_wr_falling;
 
-// ## Access state machine.
-localparam [8:0] STATE_WAIT         = 'b000000000;
-localparam [8:0] STATE_SETUP_BUS    = 'b000000001;
-localparam [8:0] STATE_DRIVE_AS     = 'b000000010;
-localparam [8:0] STATE_DRIVE_DS     = 'b000000100;
-localparam [8:0] STATE_WAIT_DSACK   = 'b000001000;
-localparam [8:0] STATE_ON_DSACK     = 'b000010000;
-localparam [8:0] STATE_CONTINUE     = 'b000100000;
-localparam [8:0] STATE_FINALIZE     = 'b001000000;
-localparam [8:0] STATE_CLEAR_AS     = 'b010000000;
-
-reg [8:0] state = STATE_WAIT;
-reg high_word;
-
-// Main state machine
-always @(posedge sys_clk) begin
-    if (pi_wr_falling) begin
+always @(negedge sys_clk) begin       
+    pi_wr_a <= PI_WR;
+    pi_wr_b <= pi_wr_a;
+    
+    if (pi_wr_b & ~pi_wr_a) begin
         case (PI_A) // synthesis full_case
             PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
             PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
@@ -368,44 +360,84 @@ always @(posedge sys_clk) begin
                     pi_control <= pi_control & ~pi_data_in[14:0];
             end
         endcase
-    end 
+    end else begin
+        if (r_clear_req_active) req_active <= 'b0;
+    end
+end
 
-    if (r_fb_rw[1]) r_rw_drive <= 1'b0;
-    else            r_rw_clear <= 1'b0;
 
-    if (r_fb_as[1]) r_as_drive <= 1'b0;
-    else            r_as_ds_clear <= 1'b0;
+
+reg [3:0] state = STATE_WAIT;
+//reg [7:0] next_state = STATE_WAIT;
+wire [3:0] next_state;
+
+reg high_word;
+
+FSMComb fsmc(
+    .ACTIVATE(req_active & CLK_7M),
+    .LATCH(mc_clk_latch),
+    .MUST_CONTINUE(r_size[1]),
+    .MC_CLK_RISING(mc_clk_rising),
+    .AS_FEEDBACK(r_fb_as[1]),
+    .CURRENT(state),
+    .NEXT(next_state)
+);
+
+reg r_clear_req_active;
+
+reg [31:0] r_data_read;
+
+always @(*) begin
+    if (high_word) 
+        r_dbus = r_data_write[31:16];
+    else
+        r_dbus = r_data_write[15:0];
+end
+
+always @(*) begin
+    if (state == STATE_WAIT_DSACK) begin
+        if (high_word) 
+            r_data_read[31:16] = D_IN;
+        else
+            r_data_read[15:0] = D_IN;
+    end
+end
+
+// Main state machine
+always @(posedge sys_clk) begin
+
+    if (!req_active) r_clear_req_active <= 1'b0;
+
+    state <= next_state;
     
-    if (r_fb_lds[1]) r_lds_drive <= 1'b0; 
-    
-    if (r_fb_uds[1]) r_uds_drive <= 1'b0;
-
     case (state) // synthesis full_case
         STATE_WAIT:
         begin
-            // If request is pending (active) then start rolling    
-            if (req_active) begin
-                r_size <= req_size;
-                r_is_read <= req_read;
-                r_abus <= req_address;
-                r_address_p2 <= req_address + 24'd2;
-                r_data_write <= req_data_write;
-                high_word <= req_size[1];
-                second_cycle <= 1'b0;
-                state <= STATE_SETUP_BUS;
-            end
+            //r_as_ds_clear <= 1'b1;
+            //r_rw_clear <= 1'b1;
+        end
+        
+        STATE_ACTIVATE:
+        begin
+            r_control_drive <= 1'b1;
+            r_size <= req_size;
+            r_is_read <= req_read;
+            r_abus <= req_address;
+                
+            r_address_p2 <= req_address + 24'd2;
+            r_data_write <= req_data_write;
+            high_word <= req_size[1];
+            second_cycle <= 1'b0;
         end
         
         // Setup bus is combination of S0 and S1 - prepare data on D/A/FC and go to driving address strobe
         STATE_SETUP_BUS:
         begin
-            if (high_word) r_dbus <= r_data_write[31:16];
-            else r_dbus <= r_data_write[15:0];
+            //if (high_word) r_dbus <= r_data_write[31:16];
+            //else r_dbus <= r_data_write[15:0];
 
             r_abus_drive <= 1'b1;
             r_fc_drive <= 1'b1;
-            
-            state <= STATE_DRIVE_AS;
         end
         
         // Drive address strobe and wait until it actually toggled. This happens in 7.14 MHz clock domain
@@ -420,41 +452,37 @@ always @(posedge sys_clk) begin
             // When entering S2 in read mode, drive LDS/UDS
             r_lds_drive <= r_is_read & (r_size[0] | r_abus[0]);
             r_uds_drive <= r_is_read & (r_size[0] | ~r_abus[0]);
-            
-            // On rising clk edge go to S2
-            if (r_fb_as[1]) begin                
-                state <= STATE_DRIVE_DS;
-            end
         end
         
         // If write this is the second place where LDS/UDS can be driven
         STATE_DRIVE_DS:
         begin
+            r_as_drive <= 1'b0;
+            
             if (!r_is_read) begin
                 r_dbus_drive <= 1'b1;
             
                 r_lds_drive <= (r_size[0] | r_abus[0]);
                 r_uds_drive <= (r_size[0] | ~r_abus[0]);
             end
-            
-            //r_dbus_drive <= ~r_is_read;
-            
-            //r_lds_drive <= ~r_is_read & (r_size[0] | r_abus[0]);
-            //r_uds_drive <= ~r_is_read & (r_size[0] | ~r_abus[0]);
-
-            state <= STATE_WAIT_DSACK;
         end
 
         // Wait for DSACK and latch data (if read)
         STATE_WAIT_DSACK:
         begin
-            if (mc_clk_latch) begin
-                if (r_is_read) begin
-                    if (high_word) req_data_read[31:16] <= din_sync[1];
-                    else req_data_read[15:0] <= din_sync[1];
-                end
-                state <= STATE_CLEAR_AS;
-            end
+            // Everything done in combinatorial logic
+        end
+        
+        STATE_LATCH:
+        begin           
+            req_data_read <= r_data_read;
+            r_lds_drive <= 1'b0;
+            r_uds_drive <= 1'b0;
+            r_rw_drive <= 1'b0;
+            /*if (r_is_read) begin
+                if (high_word) req_data_read[31:16] <= D_IN;//din_sync[1];
+                else req_data_read[15:0] <= D_IN; //din_sync[1];
+            end*/
         end
         
         STATE_CLEAR_AS:
@@ -462,49 +490,34 @@ always @(posedge sys_clk) begin
             r_as_ds_clear <= 1'b1;
             r_rw_clear <= 1'b1;
             second_cycle <= 1'b1;
-            req_active <= r_size[1];
-            state <= STATE_ON_DSACK;
+            
+            r_clear_req_active <= ~r_size[1];
         end
         
         // On DSACK (delayed) select next cycle and deassert AS/LDS/UDS/RnW
         STATE_ON_DSACK:
         begin
-            if (!r_fb_as[1]) begin
-                if (r_size[1]) begin
-                    state <= STATE_CONTINUE;
-                end
-                else begin
-                    state <= STATE_FINALIZE;
-                end
-            end
+            // Everything done in combinatorial logic
+        end
+        
+        STATE_FINALIZE:
+        begin
+            r_as_ds_clear <= 1'b0;
+            r_rw_clear <= 1'b0;
+            r_abus_drive <= 1'b0;
+            r_dbus_drive <= 1'b0;
+            r_vma_drive <= 1'b0;
+            r_fc_drive <= 1'b0;
+            r_control_drive <= 1'b0;
         end
         
         STATE_CONTINUE:
         begin
-            if (mc_clk_rising) begin
-                r_abus_drive <= 1'b0;
-                r_dbus_drive <= 1'b0;
-                r_vma_drive <= 1'b0;
-                r_fc_drive <= 1'b0;
-                high_word <= 'b0;
-                r_abus <= r_address_p2;
-                r_size <= 2'b01;
-                state <= STATE_SETUP_BUS;
-            end
+            high_word <= 'b0;
+            r_abus <= r_address_p2;
+            r_size <= 2'b01;
+            r_control_drive <= 1'b0;
         end
-
-        STATE_FINALIZE:
-        begin           
-            if (mc_clk_rising) begin
-                r_abus_drive <= 1'b0;
-                r_dbus_drive <= 1'b0;
-                r_vma_drive <= 1'b0;
-                r_fc_drive <= 1'b0;
-                state <= STATE_WAIT;
-            end
-        end
-        
-        default: state <= STATE_WAIT;
     endcase
 end
 
