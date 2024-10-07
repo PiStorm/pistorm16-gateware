@@ -459,12 +459,10 @@ always @(posedge sys_clk) begin
         begin
             r_as_drive <= 1'b0;
             
-            if (!r_is_read) begin
-                r_dbus_drive <= 1'b1;
+            r_dbus_drive <= ~r_is_read;
             
-                r_lds_drive <= (r_size[0] | r_abus[0]);
-                r_uds_drive <= (r_size[0] | ~r_abus[0]);
-            end
+            r_lds_drive <= ~r_is_read & (r_size[0] | r_abus[0]);
+            r_uds_drive <= ~r_is_read & (r_size[0] | ~r_abus[0]);
         end
 
         // Wait for DSACK and latch data (if read)
