@@ -4,6 +4,13 @@
 // This Source Code Form is subject to the terms of the
 // Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+//
+// Latches module
+// ==============
+// The module provides several latches driven by high-speed clock domain and
+// synchronized on the rising/falling edges of low-speed clock. Used to keep
+// proper timings of Amiga-chipset relevant signals: AS, LDS, UDS, RnW
 
 module DLatch(
     input wire SET,
