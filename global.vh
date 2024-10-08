@@ -33,5 +33,12 @@ localparam [2:0] PI_REG_STATUS = 3'd4;
 localparam [2:0] PI_REG_CONTROL = 3'd4;
 localparam [2:0] PI_REG_VERSION = 3'd7;
 
+
+localparam [3:0] FW_MAJOR = 4'd1;
+localparam [3:0] FW_MINOR = 4'd0;
+localparam [2:0] FW_TYPE_PS32 = 3'd1;
+localparam [2:0] FW_TYPE_PS16 = 3'd2;
+localparam [4:0] FW_EXT_DATA = 5'd0;
+
 //STATE_WAIT, STATE_ACTIVATE, STATE_SETUP_BUS, STATE_DRIVE_AS, STATE_DRIVE_DS, 
 //STATE_WAIT_DSACK, STATE_LATCH, STATE_CLEAR_AS, STATE_ON_DSACK, STATE_DEASSERT, STATE_CONTINUE, STATE_FINALIZE

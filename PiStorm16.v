@@ -92,94 +92,45 @@ module PiStorm16(
 
 `include "global.vh"
 
-// EClock generator
-EClock eclock(
-    .CLOCK_IN(CLK_7M),
-    .ECLOCK_OUT(ECLK)
-);
-
 // System clock comes from PLL
 wire sys_clk = SYS_PLL_CLKOUT0;
 
+// Emu68 debug console, either asynchronous or synchronous serial
 // Wire DBG pins as outputs from Pi GPIO 
 assign DBG_DAT = PI_GPIO_IN[5];
 assign DBG_CLK = PI_GPIO_IN[27];
 assign PI_GPIO_OE[5] = 0;
 assign PI_GPIO_OE[27] = 0;
 
+// EClock generator
+EClock eclock(
+    .CLOCK_IN(CLK_7M),
+    .ECLOCK_OUT(ECLK)
+);
+
 // Synchronize IPL, and handle skew.
-(* async_reg = "true" *) reg [2:0] ipl_sync [1:0];
-reg [2:0] ipl;
-
-//always @(posedge sys_clk) begin
-//    if (mc_clk_falling) begin
-always @(posedge mc_clk_falling) begin
-        ipl_sync[0] <= ~IPL;
-        ipl_sync[1] <= ipl_sync[0];
-
-        if (ipl_sync[0] == ipl_sync[1])
-            ipl <= ipl_sync[0];
-//    end
-end
+wire [2:0] ipl;
+IPLSynch IPLsync(
+    .CLK(~CLK_7M),
+    .IPL(ipl),
+    .IPL_ASYNC(IPL)
+);
 
 // Synchronize bus control signal inputs
 (* async_reg = "true" *) reg reset_sync;
 (* async_reg = "true" *) reg halt_sync;
-(* async_reg = "true" *) reg dtack_sync;
 (* async_reg = "true" *) reg berr_n_sync;
-(* async_reg = "true" *) reg [15:0] din_sync[0:1];
 
 always @(posedge sys_clk) begin
-    dtack_sync <= nDTACK;
     berr_n_sync <= nBERR;
     halt_sync <= nHALT_IN;
-    din_sync[1] <= din_sync[0];
-    din_sync[0] <= D_IN;
 
     if (mc_clk_falling) begin
         reset_sync <= nRESET_IN;
-        is_bm <= nBG_IN;
+        is_bm <= ~nBG_IN;
     end
 end
 
-// Wire IPL line as inputs from 68k bus to PI
-assign PI_GPIO_OUT[2:0] = ~ipl;
-assign PI_GPIO_OE[2:0] = 3'b111;
-
-// req_active is on when transfer is in progress. It is always exposed to GPIO3
-reg req_active;
-assign PI_GPIO_OUT[3] = req_active;
-assign PI_GPIO_OE[3] = 'b1;
-
-// KB_RESET (reset Into CPU) is exposed on GPIO4
-// When r_reset_drive is set to 1, nRESET_IN will be masked by it!!!
-assign PI_GPIO_OUT[4] = (reset_sync | r_reset_drive);
-assign PI_GPIO_OE[4] = 'b1;
-
-// RD or WR commands from Pi to FPGA, always input
-wire PI_RD;
-wire PI_WR;
-
-assign PI_RD = PI_GPIO_IN[6];
-assign PI_WR = PI_GPIO_IN[7];
-assign PI_GPIO_OE[7:6] = 2'b00;
-
-// Data out from FPGA to Pi
-reg [15:0] pi_data_out;
-assign PI_GPIO_OUT[23:8] = pi_data_out;
-
-// Data out from FPGA to Pi is driven on read requests only (WR=1, RD=0)
-wire drive_pi_data_out = ~PI_RD & PI_WR;
-assign PI_GPIO_OE[23:8] = {16{drive_pi_data_out}};
-
-// Data from Pi to FPGA is read on the same port inputs
-wire [15:0] pi_data_in;
-assign pi_data_in = PI_GPIO_IN[23:8];
-
-// Address from Pi to FPGA, always input
-wire [2:0] PI_A;
-assign PI_A = PI_GPIO_IN[26:24];
-assign PI_GPIO_OE[26:24] = 3'b000;
 
 // Registers used to drive entire buses at once
 reg r_fc_drive = 0;
@@ -201,11 +152,6 @@ assign TP19_OE = 0;
 assign TP20_OE = 0;
 
 // Pi control register.
-reg [14:0] pi_control = 15'b00000000000000;
-wire r_br_drive = pi_control[0];
-wire r_reset_drive = pi_control[1];
-wire r_halt_drive = pi_control[2];
-wire [7:0] r_dtack_delay = {1'b0, pi_control[14:8]};
 
 reg r_bg_drive;
 reg r_as_drive;
@@ -227,16 +173,10 @@ assign nBGACK_OE = r_bgack_drive;
 assign nBR_OE = r_br_drive;
 assign nBG_OE = r_bg_drive;
 
-(* async_reg = "true" *) reg [1:0] r_fb_uds;
-(* async_reg = "true" *) reg [1:0] r_fb_lds;
 (* async_reg = "true" *) reg [1:0] r_fb_as;
-(* async_reg = "true" *) reg [1:0] r_fb_rw;
 
 always @(posedge sys_clk) begin
-    r_fb_uds <= { r_fb_uds[0], ~nUDS_OUT };
-    r_fb_lds <= { r_fb_lds[0], ~nLDS_OUT };
     r_fb_as  <= { r_fb_as[0],  ~nAS_OUT };
-    r_fb_rw  <= { r_fb_rw[0],  ~RnW_OUT };
 end
 
 FFLatchN UDS(
@@ -278,7 +218,7 @@ wire mc_clk_latch_write;
      143 MHz        18
      145 MHz        20             16
 */
-ClockSync /*#(.DTACK_DELAY(16))*/ CLKSync (
+ClockSync CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
@@ -289,24 +229,11 @@ ClockSync /*#(.DTACK_DELAY(16))*/ CLKSync (
     .DTACK_LATCH_WRITE(mc_clk_latch_write)
 );
 
-localparam [3:0] FW_MAJOR = 4'd1;
-localparam [3:0] FW_MINOR = 4'd0;
-localparam [2:0] FW_TYPE_PS32 = 3'd1;
-localparam [2:0] FW_TYPE_PS16 = 3'd2;
-localparam [4:0] FW_EXT_DATA = 5'd0;
-
-wire [15:0] firmware_version = { FW_MAJOR, FW_MINOR, FW_TYPE_PS16, FW_EXT_DATA };
-wire [15:0] pi_status = {7'd0, second_cycle, req_active, req_terminated_normally, ipl, halt_sync, reset_sync, is_bm};
-
-reg [2:0] req_fc;
-reg req_read;
 reg second_cycle;
-reg [1:0] req_size;
-reg req_terminated_normally;
+
+reg r_terminated_normally;
 reg is_bm;
-reg [31:0] req_data_read;
-reg [31:0] req_data_write;
-reg [23:0] req_address;
+
 reg [23:0] r_address_p2;
 
 reg [23:0] r_abus;
@@ -318,60 +245,52 @@ assign D_OUT = r_dbus[15:0];
 assign A_OUT = r_abus[23:1];
 assign FC_OUT = req_fc;
 
-reg [31:0] r_data_write;
+reg [15:0] r_data_write [0:1];
+reg [15:0] r_data_read [0:1];
 
-always @(*) begin
-    case (PI_A)
-        PI_REG_DATA_LO: pi_data_out = req_data_read[15:0];
-        PI_REG_DATA_HI: pi_data_out = req_data_read[31:16];
-        PI_REG_ADDR_LO: pi_data_out = req_address[15:0];
-        PI_REG_ADDR_HI: pi_data_out = {2'd0, req_fc, req_read, req_size, req_address[23:16]};
-        PI_REG_STATUS: pi_data_out = pi_status;
-        PI_REG_VERSION: pi_data_out = firmware_version;
-        default: pi_data_out = 16'bx;
-    endcase
-end
+wire r_br_drive;
+wire r_reset_drive;
+wire r_halt_drive;
+wire [7:0] r_dtack_delay;
 
-// Synchronize WR command from Pi
-reg pi_wr_a;
-reg pi_wr_b;
-//wire pi_wr_falling = (pi_wr_sync == 2'b10);
-//wire pi_wr_rising = (pi_wr_sync == 2'b01);
+reg [31:0] req_data_read;
+wire [31:0] req_data_write;
+wire [23:0] req_address;
+wire [1:0] req_size;
+wire [2:0] req_fc;
+wire req_read;
+wire req_active;
 
-reg pi_wr_falling;
-
-always @(negedge sys_clk) begin       
-    pi_wr_a <= PI_WR;
-    pi_wr_b <= pi_wr_a;
+RasPi pi_interface(
+    .PI_GPIO_IN(PI_GPIO_IN),
+    .PI_GPIO_OUT(PI_GPIO_OUT),
+    .PI_GPIO_OE(PI_GPIO_OE),
     
-    if (pi_wr_b & ~pi_wr_a) begin
-        case (PI_A) // synthesis full_case
-            PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
-            PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
-            PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
-            PI_REG_ADDR_HI: begin
-                req_address[23:16] <= pi_data_in[7:0];
-                req_size <= pi_data_in[9:8];
-                req_read <= pi_data_in[10];
-                req_fc <= pi_data_in[13:11];
-                req_active <= 1'b1;
-            end
-            PI_REG_CONTROL: begin
-                if (pi_data_in[15]) begin
-                    pi_control <= pi_control | pi_data_in[14:0];                    
-                end else
-                    pi_control <= pi_control & ~pi_data_in[14:0];
-            end
-        endcase
-    end else begin
-        if (r_clear_req_active) req_active <= 'b0;
-    end
-end
-
-
+    .IPL(ipl),
+    .HALT(halt_sync),
+    .MASTER(is_bm),
+    .RESET(reset_sync | r_reset_drive),
+    
+    .DRIVE_BR(r_br_drive),
+    .DRIVE_HALT(r_halt_drive),
+    .DRIVE_RESET(r_reset_drive),
+    .DTACK_DELAY(r_dtack_delay),
+    
+    .SYSCLK(sys_clk),
+    .CLEAR_ACTIVE(r_clear_req_active),
+    .SECOND_CYCLE(second_cycle),
+    .ERROR(~r_terminated_normally),
+    
+    .REQUEST_DATA_IN(req_data_read),
+    .REQUEST_DATA_OUT(req_data_write),
+    .REQUEST_ADDRESS(req_address),
+    .REQUEST_SIZE(req_size),
+    .REQUEST_FC(req_fc),
+    .REQUEST_IS_READ(req_read),
+    .REQUEST_ACTIVE(req_active)
+);
 
 reg [3:0] state = STATE_WAIT;
-//reg [7:0] next_state = STATE_WAIT;
 wire [3:0] next_state;
 
 reg high_word;
@@ -388,37 +307,28 @@ FSMComb fsmc(
 
 reg r_clear_req_active;
 
-reg [31:0] r_data_read;
-
 always @(*) begin
-    if (high_word) 
-        r_dbus = r_data_write[31:16];
-    else
-        r_dbus = r_data_write[15:0];
+    r_dbus = r_data_write[high_word];  
 end
 
 always @(*) begin
     if (state == STATE_WAIT_DSACK) begin
-        if (high_word) 
-            r_data_read[31:16] = D_IN;
-        else
-            r_data_read[15:0] = D_IN;
+        r_data_read[high_word] = D_IN;
     end
 end
 
 // Main state machine
-always @(posedge sys_clk) begin
+always @(posedge sys_clk)
+begin
 
     if (!req_active) r_clear_req_active <= 1'b0;
-
+    else r_clear_req_active <= r_clear_req_active;
+   
     state <= next_state;
-    
-    case (state) // synthesis full_case
+                 
+    case (state)
         STATE_WAIT:
         begin
-            //r_as_ds_clear <= 1'b1;
-            //r_rw_clear <= 1'b1;
-            //r_control_drive <= 1'b0;
         end
         
         STATE_ACTIVATE:
@@ -429,7 +339,8 @@ always @(posedge sys_clk) begin
             r_abus <= req_address;
                 
             r_address_p2 <= req_address + 24'd2;
-            r_data_write <= req_data_write;
+            r_data_write[0] <= req_data_write[15:0];
+            r_data_write[1] <= req_data_write[31:16];
             high_word <= req_size[1];
             second_cycle <= 1'b0;
         end
@@ -466,6 +377,7 @@ always @(posedge sys_clk) begin
             r_uds_drive <= ~r_is_read & (r_size[0] | ~r_abus[0]);
         end
 
+        
         // Wait for DSACK and latch data (if read)
         STATE_WAIT_DSACK:
         begin
@@ -474,7 +386,7 @@ always @(posedge sys_clk) begin
         
         STATE_LATCH:
         begin           
-            req_data_read <= r_data_read;
+            req_data_read <= { r_data_read[1], r_data_read[0] };
             r_lds_drive <= 1'b0;
             r_uds_drive <= 1'b0;
             r_rw_drive <= 1'b0;
@@ -488,7 +400,7 @@ always @(posedge sys_clk) begin
             r_as_ds_clear <= 1'b1;
             r_rw_clear <= 1'b1;
         end
-        
+                
         // On DSACK (delayed) select next cycle and deassert AS/LDS/UDS/RnW
         STATE_ON_DSACK:
         begin
@@ -512,6 +424,11 @@ always @(posedge sys_clk) begin
             r_abus <= r_address_p2;
             r_size <= 2'b01;
         end
+        
+        default:
+        begin
+        end
+        
     endcase
 end
 
