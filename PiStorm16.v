@@ -143,7 +143,6 @@ always @(posedge sys_clk) begin
     end
 end
 
-
 // Registers used to drive entire buses at once
 reg r_fc_drive = 0;
 reg r_abus_drive = 0;
@@ -173,8 +172,6 @@ reg r_rw_drive;
 reg r_rw_clear;
 reg r_lds_drive;
 reg r_uds_drive;
-reg r_uds_clear;
-reg r_lds_clear;
 reg r_as_ds_clear;
 
 // Disable all outputs for now
@@ -222,14 +219,7 @@ FFLatchNPR RW(
 wire mc_clk_falling;
 wire mc_clk_rising;
 wire mc_clk_latch;
-wire mc_clk_latch_write;
 
-/*  Frequency   DTACK_DELAY   DTACK_PROBED
-     120 MHz        15
-     133 MHz        16
-     143 MHz        18
-     145 MHz        20             16
-*/
 ClockSync CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
@@ -237,8 +227,7 @@ ClockSync CLKSync (
     .DTACK_DELAY(r_dtack_delay),
     .MCCLK_FALLING(mc_clk_falling),
     .MCCLK_RISING(mc_clk_rising),
-    .DTACK_LATCH(mc_clk_latch),
-    .DTACK_LATCH_WRITE(mc_clk_latch_write)
+    .DTACK_LATCH(mc_clk_latch)
 );
 
 reg second_cycle;
@@ -250,7 +239,7 @@ reg [23:0] r_address_p2;
 
 reg [23:0] r_abus;
 reg [15:0] r_dbus;
-reg [1:0] r_size;
+reg r_size;
 reg r_is_read;
 
 assign D_OUT = r_dbus[15:0];
@@ -310,7 +299,7 @@ reg high_word;
 FSMComb fsmc(
     .ACTIVATE(req_active & CLK_7M),
     .LATCH(mc_clk_latch),
-    .MUST_CONTINUE(r_size[1]),
+    .MUST_CONTINUE(high_word),
     .MC_CLK_RISING(mc_clk_rising),
     .AS_FEEDBACK(r_fb_as[1]),
     .CURRENT(state),
@@ -332,8 +321,8 @@ end
 // Main state machine
 always @(posedge sys_clk)
 begin
-  
-    r_clear_req_active <= r_clear_req_active & ~req_active;
+    if (!req_active) r_clear_req_active <= 1'b0;
+
     state <= next_state;
                  
     case (state)
@@ -344,7 +333,7 @@ begin
         STATE_ACTIVATE:
         begin
             r_control_drive <= 1'b1;
-            r_size <= req_size;
+            r_size <= req_size[0];
             r_is_read <= req_read;
             r_abus <= req_address;
                 
@@ -372,8 +361,8 @@ begin
             r_rw_drive <= ~r_is_read;
             
             // When entering S2 in read mode, drive LDS/UDS
-            r_lds_drive <= r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive <= r_is_read & (r_size[0] | ~r_abus[0]);
+            r_lds_drive <= r_is_read & (r_size | r_abus[0]);
+            r_uds_drive <= r_is_read & (r_size | ~r_abus[0]);
         end
         
         // If write this is the second place where LDS/UDS can be driven
@@ -383,11 +372,10 @@ begin
             
             r_dbus_drive <= ~r_is_read;
             
-            r_lds_drive <= ~r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive <= ~r_is_read & (r_size[0] | ~r_abus[0]);
+            r_lds_drive <= ~r_is_read & (r_size | r_abus[0]);
+            r_uds_drive <= ~r_is_read & (r_size | ~r_abus[0]);
         end
 
-        
         // Wait for DSACK and latch data (if read)
         STATE_WAIT_DSACK:
         begin
@@ -402,7 +390,7 @@ begin
             r_rw_drive <= 1'b0;
 
             second_cycle <= 1'b1;
-            r_clear_req_active <= ~r_size[1];
+            r_clear_req_active <= ~high_word;
         end
         
         STATE_CLEAR_AS:
@@ -425,14 +413,13 @@ begin
             r_dbus_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
-            r_control_drive <= r_size[1];
+            r_control_drive <= high_word;
         end
         
         STATE_CONTINUE:
         begin
             high_word <= 'b0;
             r_abus <= r_address_p2;
-            r_size <= 2'b01;
         end
         
         default:
@@ -443,4 +430,3 @@ begin
 end
 
 endmodule
-
