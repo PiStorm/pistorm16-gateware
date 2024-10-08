@@ -148,7 +148,7 @@ always @(negedge SYSCLK) begin
             end
         endcase
     end else begin
-        REQUEST_ACTIVE <= REQUEST_ACTIVE & ~CLEAR_ACTIVE;
+        if (CLEAR_ACTIVE) REQUEST_ACTIVE <= 1'b0;
     end
 end
 
