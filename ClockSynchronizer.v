@@ -27,8 +27,7 @@ module ClockSync
     input wire [7:0] DTACK_DELAY,
     output reg MCCLK_FALLING,
     output reg MCCLK_RISING,
-    output reg DTACK_LATCH,
-    output reg DTACK_LATCH_WRITE
+    output reg DTACK_LATCH
 );
 
 reg [1:0] mc_clk_long;
