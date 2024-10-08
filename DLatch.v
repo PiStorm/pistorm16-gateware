@@ -35,7 +35,7 @@ wire clocked_reset = RESET & clear;
 always @(posedge CLK or posedge clocked_reset) begin
     if (clocked_reset)
         OUT <= 1'b0;
-    else if (CLK && SET)
+    else if (CLK & SET)
         OUT <= 1'b1;
 end
 
@@ -46,8 +46,65 @@ always @(negedge CLK) begin
         clear <= 1'b0; 
 end
 
+endmodule
+
+module FFLatchN(
+    input wire SET,
+    input wire RESET,
+    input wire CLK,
+    output reg OUT
+);
+
+reg clear;
+wire clocked_reset = RESET & clear;
+
+always @(posedge CLK or posedge clocked_reset) begin
+    if (clocked_reset)
+        OUT <= 1'b1;
+    else if (CLK & SET)
+        OUT <= 1'b0;
+end
+
+always @(negedge CLK) begin
+    if (RESET)
+        clear <= 1'b1;
+    else
+        clear <= 1'b0; 
+end
+
+endmodule
 
 
+module FFLatchPR(
+    input wire SET,
+    input wire RESET,
+    input wire CLK,
+    output reg OUT
+);
+
+always @(posedge CLK) begin
+    if (SET)
+        OUT <= 1'b1;
+    else if (RESET)
+        OUT <= 1'b0;
+end
+
+endmodule
+
+
+module FFLatchNPR(
+    input wire SET,
+    input wire RESET,
+    input wire CLK,
+    output reg OUT
+);
+
+always @(posedge CLK) begin
+    if (SET)
+        OUT <= 1'b0;
+    else if (RESET)
+        OUT <= 1'b1;
+end
 
 endmodule
 
