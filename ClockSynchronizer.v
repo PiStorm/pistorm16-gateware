@@ -4,16 +4,22 @@
 // This Source Code Form is subject to the terms of the
 // Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
-// FPGA clock    DTACK_DELAY
-//   120 MHz          16
-
-// maximum time after which data is valid after DTACK asserted is 90ns
+//
+// ClockSync module
+// ================
+// Clock synchronizer provides falling and rising strobes from low-speed 7.14 MHz clock.
+// Further, it provides time-shifted signal from nDTACK bus of Amiga. This latch is used
+// to control the main FSM.
+// The reason of the above is partially screwed timing of A500/A600. There, the nDTACK
+// appears somewhere in the middle of S4 state. According to m68k user manual, the data on
+// the bus is then latched on falling clock edge of S6->S7 transition. This is fine but
+// it could happen already earlier. The manual says that device shall take not longer than 90ns
+// to stabilize data bus after asserting DTACK. Amiga does not.
+// The delayed DTACK, either hardcoded as a constant or provided from a register is used to 
+// fine-tune the delay so that Firmware latches data as soon as possible but not before the
+// data is stable. Use with care.
 
 module ClockSync
-/*#(
-    parameter DTACK_DELAY = 15
-)*/
 (
     input wire SYSCLK,
     input wire DTACK,

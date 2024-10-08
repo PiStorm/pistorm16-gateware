@@ -1,3 +1,18 @@
+// Copyright © 2024 Michal Schulz <michal.schulz@gmx.de>
+// https://github.com/michalsc
+//
+// This Source Code Form is subject to the terms of the
+// Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+//
+// RasPi module
+// ============
+// Interface between Pi/Emu68 and rest of firmware. Currently hand-driven 16-bit
+// spi-alike but might change in future to something faster and/or more automated
+// on the Pi side. Several signas are passed-through directly to GPIO interface for
+// speed.
+
 module RasPi(
     // PI bus
     input wire [27:0]   PI_GPIO_IN,
@@ -65,6 +80,15 @@ wire [2:0] PI_A;
 assign PI_A = PI_GPIO_IN[26:24];
 assign PI_GPIO_OE[26:24] = 3'b000;
 
+/*
+    IPL synchronizer
+    
+    The IPL signal was already sampled on falling edge of 7.14MHz clock and is assed this way to Pi interface.
+    In theory it should be re-sampled to the SYSCLK clock domain here since it is exposed through the PI_REG_STATUS
+    register. But. It is also exposed as part of GPIO and in that case it is re-sampled to ARM clock domain by
+    Emu68, so resampling here would be waste of resources, only. Hence this part is commented away on purpose.
+*/
+/*
 reg [2:0] ipl_sync_a;
 reg [2:0] ipl_sync_b;
 
@@ -72,10 +96,11 @@ always @(negedge SYSCLK) begin
     ipl_sync_b <= ipl_sync_a;
     ipl_sync_a <= IPL;
 end
+*/
 
 // Firmware version
 wire [15:0] firmware_version = { FW_MAJOR, FW_MINOR, FW_TYPE_PS16, FW_EXT_DATA };
-wire [15:0] pi_status = {7'd0, SECOND_CYCLE, REQUEST_ACTIVE, ~ERROR, ipl_sync_b, HALT, RESET, MASTER};
+wire [15:0] pi_status = {7'd0, SECOND_CYCLE, REQUEST_ACTIVE, ~ERROR, /*ipl_sync_b*/ IPL, HALT, RESET, MASTER};
 
 always @(*) begin
     case (PI_A)

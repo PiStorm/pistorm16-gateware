@@ -1,3 +1,15 @@
+// Copyright © 2024 Michal Schulz <michal.schulz@gmx.de>
+// https://github.com/michalsc
+//
+// This Source Code Form is subject to the terms of the
+// Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+//
+//
+// PiStorm16 module
+// ================
+// The top module of PiStorm16 firmware connecting everything else in place.
+
 `default_nettype none
 
 module PiStorm16(
@@ -320,10 +332,8 @@ end
 // Main state machine
 always @(posedge sys_clk)
 begin
-
-    if (!req_active) r_clear_req_active <= 1'b0;
-    else r_clear_req_active <= r_clear_req_active;
-   
+  
+    r_clear_req_active <= r_clear_req_active & ~req_active;
     state <= next_state;
                  
     case (state)
