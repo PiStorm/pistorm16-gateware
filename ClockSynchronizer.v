@@ -28,6 +28,7 @@ module ClockSync
     input wire DTACK,
     input wire MCCLK,
     input wire [7:0] DTACK_DELAY,
+    output wire MCCLK_SYNC,
     output reg MCCLK_FALLING,
     output reg MCCLK_RISING,
     output reg DTACK_LATCH,
@@ -37,7 +38,9 @@ module ClockSync
 reg [1:0] mc_clk_long;
 reg [7:0] cnt;
 
-always @(negedge SYSCLK)
+assign MCCLK_SYNC = mc_clk_long[1];
+
+always @(posedge SYSCLK)
 begin
     mc_clk_long <= { mc_clk_long[0], MCCLK };
     

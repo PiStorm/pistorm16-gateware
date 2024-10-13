@@ -123,30 +123,22 @@ assign PI_GPIO_OE[27] = 0;
 (* async_reg = "true" *) reg [2:0] ipl_sync [1:0];
 reg [2:0] ipl;
 
-//always @(posedge sys_clk) begin
-//    if (mc_clk_falling) begin
-always @(posedge mc_clk_falling) begin
-        ipl_sync[0] <= ~IPL;
-        ipl_sync[1] <= ipl_sync[0];
+always @(negedge CLK_7M) begin
+    ipl_sync[0] <= ~IPL;
+    ipl_sync[1] <= ipl_sync[0];
 
-        if (ipl_sync[0] == ipl_sync[1])
-            ipl <= ipl_sync[0];
-//    end
+    if (ipl_sync[0] == ipl_sync[1])
+        ipl <= ipl_sync[0];
 end
 
 // Synchronize bus control signal inputs
 (* async_reg = "true" *) reg reset_sync;
 (* async_reg = "true" *) reg halt_sync;
-(* async_reg = "true" *) reg dtack_sync;
 (* async_reg = "true" *) reg berr_n_sync;
-(* async_reg = "true" *) reg [15:0] din_sync[0:1];
 
 always @(posedge sys_clk) begin
-    dtack_sync <= nDTACK;
     berr_n_sync <= nBERR;
     halt_sync <= nHALT_IN;
-    din_sync[1] <= din_sync[0];
-    din_sync[0] <= D_IN;
 
     if (mc_clk_falling) begin
         reset_sync <= nRESET_IN;
@@ -160,7 +152,7 @@ assign PI_GPIO_OE[2:0] = 3'b111;
 
 // req_active is on when transfer is in progress. It is always exposed to GPIO3
 reg req_active;
-assign PI_GPIO_OUT[3] = req_active;
+assign PI_GPIO_OUT[3] = PI_REG_DATA_HI == PI_A ? ~second_cycle : req_active;
 assign PI_GPIO_OE[3] = 'b1;
 
 // KB_RESET (reset Into CPU) is exposed on GPIO4
@@ -239,16 +231,10 @@ assign nBGACK_OE = r_bgack_drive;
 assign nBR_OE = r_br_drive;
 assign nBG_OE = r_bg_drive;
 
-(* async_reg = "true" *) reg [1:0] r_fb_uds;
-(* async_reg = "true" *) reg [1:0] r_fb_lds;
 (* async_reg = "true" *) reg [1:0] r_fb_as;
-(* async_reg = "true" *) reg [1:0] r_fb_rw;
 
 always @(posedge sys_clk) begin
-    r_fb_uds <= { r_fb_uds[0], ~nUDS_OUT };
-    r_fb_lds <= { r_fb_lds[0], ~nLDS_OUT };
     r_fb_as  <= { r_fb_as[0],  ~nAS_OUT };
-    r_fb_rw  <= { r_fb_rw[0],  ~RnW_OUT };
 end
 
 FFLatchN UDS(
@@ -282,7 +268,7 @@ FFLatchNPR RW(
 wire mc_clk_falling;
 wire mc_clk_rising;
 wire mc_clk_latch;
-wire mc_clk_latch_write;
+wire mc_clk_sync;
 
 /*  Frequency   DTACK_DELAY   DTACK_PROBED
      120 MHz        15
@@ -297,8 +283,8 @@ ClockSync /*#(.DTACK_DELAY(16))*/ CLKSync (
     .DTACK_DELAY(r_dtack_delay),
     .MCCLK_FALLING(mc_clk_falling),
     .MCCLK_RISING(mc_clk_rising),
-    .DTACK_LATCH(mc_clk_latch),
-    .DTACK_LATCH_WRITE(mc_clk_latch_write)
+    .MCCLK_SYNC(mc_clk_sync),
+    .DTACK_LATCH(mc_clk_latch)
 );
 
 localparam [3:0] FW_MAJOR = 4'd1;
@@ -323,7 +309,7 @@ reg [23:0] r_address_p2;
 
 reg [23:0] r_abus;
 reg [15:0] r_dbus;
-reg [1:0] r_size;
+reg r_size_word;
 reg r_is_read;
 
 assign D_OUT = r_dbus[15:0];
@@ -345,45 +331,43 @@ always @(*) begin
 end
 
 // Synchronize WR command from Pi
-reg pi_wr_a;
-reg pi_wr_b;
+//reg pi_wr_a;
+//reg pi_wr_b;
 //wire pi_wr_falling = (pi_wr_sync == 2'b10);
 //wire pi_wr_rising = (pi_wr_sync == 2'b01);
 
-reg pi_wr_falling;
+//reg pi_wr_falling;
 
-always @(negedge sys_clk) begin       
-    pi_wr_a <= PI_WR;
-    pi_wr_b <= pi_wr_a;
-    
-    if (pi_wr_b & ~pi_wr_a) begin
-        case (PI_A) // synthesis full_case
-            PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
-            PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
-            PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
-            PI_REG_ADDR_HI: begin
-                req_address[23:16] <= pi_data_in[7:0];
-                req_size <= pi_data_in[9:8];
-                req_read <= pi_data_in[10];
-                req_fc <= pi_data_in[13:11];
-                req_active <= 1'b1;
-            end
-            PI_REG_CONTROL: begin
-                if (pi_data_in[15]) begin
-                    pi_control <= pi_control | pi_data_in[14:0];                    
-                end else
-                    pi_control <= pi_control & ~pi_data_in[14:0];
-            end
-        endcase
-    end else begin
-        if (r_clear_req_active) req_active <= 'b0;
-    end
+reg addr_hi_written;
+
+always @(negedge PI_WR) begin       
+    addr_hi_written <= 1'b0;
+    case (PI_A) // synthesis full_case
+        PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
+        PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
+        PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
+        PI_REG_ADDR_HI: begin
+            req_address[23:16] <= pi_data_in[7:0];
+            req_size <= pi_data_in[9:8];
+            req_read <= pi_data_in[10];
+            req_fc <= pi_data_in[13:11];
+            addr_hi_written <= 1'b1;
+        end
+        PI_REG_CONTROL: begin
+            if (pi_data_in[15]) begin
+                pi_control <= pi_control | pi_data_in[14:0];                    
+            end else
+                pi_control <= pi_control & ~pi_data_in[14:0];
+        end
+    endcase
 end
 
-
+always @(posedge addr_hi_written or posedge r_clear_req_active) begin
+    if (r_clear_req_active) req_active <= 1'b0;
+    else if (addr_hi_written) req_active <= 1'b1;
+end
 
 reg [3:0] state = STATE_WAIT;
-//reg [7:0] next_state = STATE_WAIT;
 wire [3:0] next_state;
 
 reg high_word;
@@ -391,9 +375,9 @@ reg high_word;
 FSMComb fsmc(
     .ACTIVATE(req_active & CLK_7M),
     .LATCH(mc_clk_latch),
-    .MUST_CONTINUE(r_size[1]),
-    .MC_CLK_RISING(mc_clk_rising),
-    .AS_FEEDBACK(r_fb_as[1]),
+    .MUST_CONTINUE(high_word),
+    .MC_CLK_RISING(mc_clk_rising), // CLK_7M),
+    .AS_FEEDBACK(~nAS_OUT), // r_fb_as[1]),
     .CURRENT(state),
     .NEXT(next_state)
 );
@@ -409,19 +393,17 @@ always @(*) begin
         r_dbus = r_data_write[15:0];
 end
 
-always @(*) begin
-    if (state == STATE_WAIT_DSACK) begin
-        if (high_word) 
-            r_data_read[31:16] = D_IN;
-        else
-            r_data_read[15:0] = D_IN;
-    end
+always @(posedge mc_clk_latch) begin
+    if (high_word) 
+        r_data_read[31:16] <= D_IN;
+    else
+        r_data_read[15:0] <= D_IN;
 end
 
 // Main state machine
 always @(posedge sys_clk) begin
 
-    if (!req_active) r_clear_req_active <= 1'b0;
+    //if (!req_active) r_clear_req_active <= 1'b0;
 
     state <= next_state;
     
@@ -433,10 +415,14 @@ always @(posedge sys_clk) begin
             //r_control_drive <= 1'b0;
         end
         
+        STATE_WAKEUP:
+        begin
+        end
+        
         STATE_ACTIVATE:
         begin
             r_control_drive <= 1'b1;
-            r_size <= req_size;
+            r_size_word <= req_size[0];
             r_is_read <= req_read;
             r_abus <= req_address;
                 
@@ -463,8 +449,8 @@ always @(posedge sys_clk) begin
             r_rw_drive <= ~r_is_read;
             
             // When entering S2 in read mode, drive LDS/UDS
-            r_lds_drive <= r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive <= r_is_read & (r_size[0] | ~r_abus[0]);
+            r_lds_drive <= r_is_read & (r_size_word | r_abus[0]);
+            r_uds_drive <= r_is_read & (r_size_word | ~r_abus[0]);
         end
         
         // If write this is the second place where LDS/UDS can be driven
@@ -474,8 +460,8 @@ always @(posedge sys_clk) begin
             
             r_dbus_drive <= ~r_is_read;
             
-            r_lds_drive <= ~r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive <= ~r_is_read & (r_size[0] | ~r_abus[0]);
+            r_lds_drive <= ~r_is_read & (r_size_word | r_abus[0]);
+            r_uds_drive <= ~r_is_read & (r_size_word | ~r_abus[0]);
         end
 
         // Wait for DSACK and latch data (if read)
@@ -492,11 +478,12 @@ always @(posedge sys_clk) begin
             r_rw_drive <= 1'b0;
 
             second_cycle <= 1'b1;
-            r_clear_req_active <= ~r_size[1];
+            r_clear_req_active <= ~high_word;
         end
         
         STATE_CLEAR_AS:
         begin
+            r_clear_req_active <= 1'b0;
             r_as_ds_clear <= 1'b1;
             r_rw_clear <= 1'b1;
         end
@@ -515,14 +502,13 @@ always @(posedge sys_clk) begin
             r_dbus_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
-            r_control_drive <= r_size[1];
+            r_control_drive <= high_word;
         end
         
         STATE_CONTINUE:
         begin
             high_word <= 'b0;
             r_abus <= r_address_p2;
-            r_size <= 2'b01;
         end
     endcase
 end

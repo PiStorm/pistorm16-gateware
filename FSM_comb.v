@@ -26,8 +26,10 @@ module FSMComb(
 always @(*) begin
     case (CURRENT)
         STATE_WAIT:
-            if (ACTIVATE)           NEXT = STATE_ACTIVATE;
+            if (ACTIVATE)           NEXT = STATE_WAKEUP;
             else                    NEXT = STATE_WAIT;
+        
+        STATE_WAKEUP:               NEXT = STATE_ACTIVATE;
         
         STATE_ACTIVATE:             NEXT = STATE_SETUP_BUS;
         
@@ -48,7 +50,7 @@ always @(*) begin
         STATE_CLEAR_AS:             NEXT = STATE_ON_DSACK;
         
         STATE_ON_DSACK:
-            if (~AS_FEEDBACK & MC_CLK_RISING)
+            if (!AS_FEEDBACK && MC_CLK_RISING)
                                     NEXT = STATE_FINALIZE;
             else                    NEXT = STATE_ON_DSACK;
         
