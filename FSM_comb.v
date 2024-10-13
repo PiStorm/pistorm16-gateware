@@ -26,11 +26,9 @@ module FSMComb(
 always @(*) begin
     case (CURRENT)
         STATE_WAIT:
-            if (ACTIVATE)           NEXT = STATE_WAKEUP;
+            if (ACTIVATE)           NEXT = STATE_ACTIVATE;
             else                    NEXT = STATE_WAIT;
-        
-        STATE_WAKEUP:               NEXT = STATE_ACTIVATE;
-        
+               
         STATE_ACTIVATE:             NEXT = STATE_SETUP_BUS;
         
         STATE_SETUP_BUS:            NEXT = STATE_DRIVE_AS;

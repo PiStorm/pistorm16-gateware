@@ -295,6 +295,7 @@ localparam [4:0] FW_EXT_DATA = 5'd0;
 
 wire [15:0] firmware_version = { FW_MAJOR, FW_MINOR, FW_TYPE_PS16, FW_EXT_DATA };
 wire [15:0] pi_status = {7'd0, second_cycle, req_active, req_terminated_normally, ipl, halt_sync, reset_sync, is_bm};
+wire [15:0] pi_clock = {8'd0, 8'd140 };
 
 reg [2:0] req_fc;
 reg req_read;
@@ -325,23 +326,18 @@ always @(*) begin
         PI_REG_ADDR_LO: pi_data_out = req_address[15:0];
         PI_REG_ADDR_HI: pi_data_out = {2'd0, req_fc, req_read, req_size, req_address[23:16]};
         PI_REG_STATUS: pi_data_out = pi_status;
+        PI_REG_FREQUENCY: pi_data_out = pi_clock;
         PI_REG_VERSION: pi_data_out = firmware_version;
         default: pi_data_out = 16'bx;
     endcase
 end
 
-// Synchronize WR command from Pi
-//reg pi_wr_a;
-//reg pi_wr_b;
-//wire pi_wr_falling = (pi_wr_sync == 2'b10);
-//wire pi_wr_rising = (pi_wr_sync == 2'b01);
-
-//reg pi_wr_falling;
-
 reg addr_hi_written;
 
-always @(negedge PI_WR) begin       
-    addr_hi_written <= 1'b0;
+always @(negedge PI_WR or posedge r_clear_req_active) begin       
+    //addr_hi_written <= 1'b0;
+    if (r_clear_req_active) req_active <= 1'b0;
+    else if (!PI_WR) begin
     case (PI_A) // synthesis full_case
         PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
         PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
@@ -351,7 +347,8 @@ always @(negedge PI_WR) begin
             req_size <= pi_data_in[9:8];
             req_read <= pi_data_in[10];
             req_fc <= pi_data_in[13:11];
-            addr_hi_written <= 1'b1;
+            req_active <= 1'b1;
+            //addr_hi_written <= 1'b1;
         end
         PI_REG_CONTROL: begin
             if (pi_data_in[15]) begin
@@ -360,13 +357,14 @@ always @(negedge PI_WR) begin
                 pi_control <= pi_control & ~pi_data_in[14:0];
         end
     endcase
+    end
 end
-
+/*
 always @(posedge addr_hi_written or posedge r_clear_req_active) begin
     if (r_clear_req_active) req_active <= 1'b0;
     else if (addr_hi_written) req_active <= 1'b1;
 end
-
+*/
 reg [3:0] state = STATE_WAIT;
 wire [3:0] next_state;
 
@@ -376,8 +374,8 @@ FSMComb fsmc(
     .ACTIVATE(req_active & CLK_7M),
     .LATCH(mc_clk_latch),
     .MUST_CONTINUE(high_word),
-    .MC_CLK_RISING(mc_clk_rising), // CLK_7M),
-    .AS_FEEDBACK(~nAS_OUT), // r_fb_as[1]),
+    .MC_CLK_RISING(mc_clk_rising), //CLK_7M),
+    .AS_FEEDBACK(r_fb_as[1]), //~nAS_OUT),
     .CURRENT(state),
     .NEXT(next_state)
 );
@@ -395,27 +393,20 @@ end
 
 always @(posedge mc_clk_latch) begin
     if (high_word) 
-        r_data_read[31:16] <= D_IN;
+        req_data_read[31:16] <= D_IN;
     else
-        r_data_read[15:0] <= D_IN;
+        req_data_read[15:0] <= D_IN;
 end
 
 // Main state machine
 always @(posedge sys_clk) begin
 
-    //if (!req_active) r_clear_req_active <= 1'b0;
+    if (!req_active) r_clear_req_active <= 1'b0;
 
     state <= next_state;
     
     case (state) // synthesis full_case
         STATE_WAIT:
-        begin
-            //r_as_ds_clear <= 1'b1;
-            //r_rw_clear <= 1'b1;
-            //r_control_drive <= 1'b0;
-        end
-        
-        STATE_WAKEUP:
         begin
         end
         
@@ -472,18 +463,15 @@ always @(posedge sys_clk) begin
         
         STATE_LATCH:
         begin           
-            req_data_read <= r_data_read;
             r_lds_drive <= 1'b0;
             r_uds_drive <= 1'b0;
             r_rw_drive <= 1'b0;
-
             second_cycle <= 1'b1;
             r_clear_req_active <= ~high_word;
         end
         
         STATE_CLEAR_AS:
         begin
-            r_clear_req_active <= 1'b0;
             r_as_ds_clear <= 1'b1;
             r_rw_clear <= 1'b1;
         end
