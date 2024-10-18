@@ -161,7 +161,7 @@ assign PI_GPIO_OE[2:0] = 3'b111;
 // req_active is on when transfer is in progress. It is always exposed to GPIO3
 reg req_active;
 //assign PI_GPIO_OUT[3] = req_active;
-assign PI_GPIO_OUT[3] = (PI_A == PI_REG_DATA_HI) ? ~second_cycle : req_active;
+assign PI_GPIO_OUT[3] = (PI_A == PI_REG_DATA_HI) ? high_word : req_active;
 assign PI_GPIO_OE[3] = 'b1;
 
 // KB_RESET (reset Into CPU) is exposed on GPIO4
@@ -309,11 +309,10 @@ localparam [2:0] FW_TYPE_PS16 = 3'd2;
 localparam [4:0] FW_EXT_DATA = 5'd0;
 
 wire [15:0] firmware_version = { FW_MAJOR, FW_MINOR, FW_TYPE_PS16, FW_EXT_DATA };
-wire [15:0] pi_status = {7'd0, second_cycle, req_active, req_terminated_normally, ipl, halt_sync, reset_sync, is_bm};
+wire [15:0] pi_status = {8'd0, req_active, req_terminated_normally, ipl, halt_sync, reset_sync, is_bm};
 
 reg [2:0] req_fc;
 reg req_read;
-reg second_cycle;
 reg [1:0] req_size;
 reg req_terminated_normally;
 reg is_bm;
@@ -348,8 +347,6 @@ end
 // Synchronize WR command from Pi
 reg pi_wr_a;
 reg pi_wr_b;
-//wire pi_wr_falling = (pi_wr_sync == 2'b10);
-//wire pi_wr_rising = (pi_wr_sync == 2'b01);
 
 reg pi_wr_falling;
 
@@ -384,7 +381,6 @@ end
 
 
 reg [3:0] state = STATE_WAIT;
-//reg [7:0] next_state = STATE_WAIT;
 wire [3:0] next_state;
 
 reg high_word;
@@ -411,13 +407,10 @@ always @(*) begin
 end
 
 always @(posedge mc_clk_latch) begin
-//always @(*) begin
-//    if (state == STATE_WAIT_DSACK) begin
-        if (high_word) 
-            req_data_read[31:16] <= D_IN;
-        else
-            req_data_read[15:0] <= D_IN;
-//    end
+    if (high_word) 
+        req_data_read[31:16] <= D_IN;
+    else
+        req_data_read[15:0] <= D_IN;
 end
 
 // Main state machine
@@ -445,7 +438,6 @@ always @(posedge sys_clk) begin
             r_address_p2 <= req_address + 24'd2;
             r_data_write <= req_data_write;
             high_word <= req_size[1];
-            second_cycle <= 1'b0;
         end
         
         // Setup bus is combination of S0 and S1 - prepare data on D/A/FC and go to driving address strobe
@@ -492,9 +484,8 @@ always @(posedge sys_clk) begin
             r_lds_drive <= 1'b0;
             r_uds_drive <= 1'b0;
             r_rw_drive <= 1'b0;
-            second_cycle <= 1'b1;
+
             if (!high_word) r_clear_req_active <= 1'b1;
-            //r_clear_req_active <= ~high_word;
         end
         
         STATE_CLEAR_AS:
