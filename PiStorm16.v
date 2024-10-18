@@ -160,7 +160,8 @@ assign PI_GPIO_OE[2:0] = 3'b111;
 
 // req_active is on when transfer is in progress. It is always exposed to GPIO3
 reg req_active;
-assign PI_GPIO_OUT[3] = req_active;
+//assign PI_GPIO_OUT[3] = req_active;
+assign PI_GPIO_OUT[3] = (PI_A == PI_REG_DATA_HI) ? ~second_cycle : req_active;
 assign PI_GPIO_OE[3] = 'b1;
 
 // KB_RESET (reset Into CPU) is exposed on GPIO4
@@ -323,7 +324,7 @@ reg [23:0] r_address_p2;
 
 reg [23:0] r_abus;
 reg [15:0] r_dbus;
-reg [1:0] r_size;
+reg r_size_16bit;
 reg r_is_read;
 
 assign D_OUT = r_dbus[15:0];
@@ -391,9 +392,9 @@ reg high_word;
 FSMComb fsmc(
     .ACTIVATE(req_active & CLK_7M),
     .LATCH(mc_clk_latch),
-    .MUST_CONTINUE(r_size[1]),
-    .MC_CLK_RISING(mc_clk_rising),
-    .AS_FEEDBACK(r_fb_as[1]),
+    .MUST_CONTINUE(high_word),
+    .MC_CLK_RISING(CLK_7M),
+    .AS_FEEDBACK(~nAS_OUT), // r_fb_as[1]),
     .CURRENT(state),
     .NEXT(next_state)
 );
@@ -409,13 +410,14 @@ always @(*) begin
         r_dbus = r_data_write[15:0];
 end
 
-always @(*) begin
-    if (state == STATE_WAIT_DSACK) begin
+always @(posedge mc_clk_latch) begin
+//always @(*) begin
+//    if (state == STATE_WAIT_DSACK) begin
         if (high_word) 
-            r_data_read[31:16] = D_IN;
+            req_data_read[31:16] <= D_IN;
         else
-            r_data_read[15:0] = D_IN;
-    end
+            req_data_read[15:0] <= D_IN;
+//    end
 end
 
 // Main state machine
@@ -436,7 +438,7 @@ always @(posedge sys_clk) begin
         STATE_ACTIVATE:
         begin
             r_control_drive <= 1'b1;
-            r_size <= req_size;
+            r_size_16bit <= req_size[0];
             r_is_read <= req_read;
             r_abus <= req_address;
                 
@@ -463,8 +465,8 @@ always @(posedge sys_clk) begin
             r_rw_drive <= ~r_is_read;
             
             // When entering S2 in read mode, drive LDS/UDS
-            r_lds_drive <= r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive <= r_is_read & (r_size[0] | ~r_abus[0]);
+            r_lds_drive <= r_is_read & (r_size_16bit | r_abus[0]);
+            r_uds_drive <= r_is_read & (r_size_16bit | ~r_abus[0]);
         end
         
         // If write this is the second place where LDS/UDS can be driven
@@ -474,8 +476,8 @@ always @(posedge sys_clk) begin
             
             r_dbus_drive <= ~r_is_read;
             
-            r_lds_drive <= ~r_is_read & (r_size[0] | r_abus[0]);
-            r_uds_drive <= ~r_is_read & (r_size[0] | ~r_abus[0]);
+            r_lds_drive <= ~r_is_read & (r_size_16bit | r_abus[0]);
+            r_uds_drive <= ~r_is_read & (r_size_16bit | ~r_abus[0]);
         end
 
         // Wait for DSACK and latch data (if read)
@@ -486,13 +488,13 @@ always @(posedge sys_clk) begin
         
         STATE_LATCH:
         begin           
-            req_data_read <= r_data_read;
+            //req_data_read <= r_data_read;
             r_lds_drive <= 1'b0;
             r_uds_drive <= 1'b0;
             r_rw_drive <= 1'b0;
-
             second_cycle <= 1'b1;
-            r_clear_req_active <= ~r_size[1];
+            if (!high_word) r_clear_req_active <= 1'b1;
+            //r_clear_req_active <= ~high_word;
         end
         
         STATE_CLEAR_AS:
@@ -515,14 +517,13 @@ always @(posedge sys_clk) begin
             r_dbus_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
-            r_control_drive <= r_size[1];
+            r_control_drive <= high_word;
+            high_word <= 'b0;
         end
         
         STATE_CONTINUE:
         begin
-            high_word <= 'b0;
             r_abus <= r_address_p2;
-            r_size <= 2'b01;
         end
     endcase
 end

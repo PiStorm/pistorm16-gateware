@@ -48,7 +48,7 @@ always @(*) begin
         STATE_CLEAR_AS:             NEXT = STATE_ON_DSACK;
         
         STATE_ON_DSACK:
-            if (~AS_FEEDBACK & MC_CLK_RISING)
+            if (!AS_FEEDBACK && MC_CLK_RISING)
                                     NEXT = STATE_FINALIZE;
             else                    NEXT = STATE_ON_DSACK;
         
