@@ -198,7 +198,8 @@ assign PI_GPIO_OE[26:24] = 3'b000;
 reg r_fc_drive = 0;
 reg r_abus_drive = 0;
 reg r_dbus_drive = 0;
-reg r_control_drive = 0;
+wire r_control_drive;
+assign r_control_drive = ~is_bm;
 
 assign FC_OE = {3{r_fc_drive}};
 assign D_OE = {16{r_dbus_drive}};
@@ -427,10 +428,10 @@ always @(posedge sys_clk) begin
             //r_rw_clear <= 1'b1;
             //r_control_drive <= 1'b0;
         end
-        
+               
         STATE_ACTIVATE:
         begin
-            r_control_drive <= 1'b1;
+            //r_control_drive <= 1'b1;
             r_size_16bit <= req_size[0];
             r_is_read <= req_read;
             r_abus <= req_address;
@@ -508,7 +509,7 @@ always @(posedge sys_clk) begin
             r_dbus_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
-            r_control_drive <= high_word;
+            //r_control_drive <= high_word;
             high_word <= 'b0;
         end
         
