@@ -385,11 +385,12 @@ reg [3:0] state = STATE_WAIT;
 wire [3:0] next_state;
 
 reg high_word;
+reg r_must_continue;
 
 FSMComb fsmc(
     .ACTIVATE(req_active & CLK_7M),
     .LATCH(mc_clk_latch),
-    .MUST_CONTINUE(high_word),
+    .MUST_CONTINUE(r_must_continue),
     .MC_CLK_RISING(CLK_7M),
     .AS_FEEDBACK(~nAS_OUT), // r_fb_as[1]),
     .CURRENT(state),
@@ -424,6 +425,10 @@ always @(posedge sys_clk) begin
     case (state) // synthesis full_case
         STATE_WAIT:
         begin
+            r_abus_drive <= 1'b0;
+            r_dbus_drive <= 1'b0;
+            r_vma_drive <= 1'b0;
+            r_fc_drive <= 1'b0;
             //r_as_ds_clear <= 1'b1;
             //r_rw_clear <= 1'b1;
             //r_control_drive <= 1'b0;
@@ -451,6 +456,9 @@ always @(posedge sys_clk) begin
         // Drive address strobe and wait until it actually toggled. This happens in 7.14 MHz clock domain
         STATE_DRIVE_AS:
         begin
+            // Make a copy of high word, used to guess if second transfer is necessary
+            r_must_continue <= high_word;
+            
             // Assert address strobe
             r_as_drive <= 1'b1;
 
@@ -505,17 +513,18 @@ always @(posedge sys_clk) begin
         begin
             r_as_ds_clear <= 1'b0;
             r_rw_clear <= 1'b0;
-            r_abus_drive <= 1'b0;
-            r_dbus_drive <= 1'b0;
-            r_vma_drive <= 1'b0;
-            r_fc_drive <= 1'b0;
+            //r_abus_drive <= 1'b0;
+            //r_dbus_drive <= 1'b0;
+            //r_vma_drive <= 1'b0;
+            //r_fc_drive <= 1'b0;
             //r_control_drive <= high_word;
             high_word <= 'b0;
+            r_abus <= r_address_p2;
         end
         
         STATE_CONTINUE:
         begin
-            r_abus <= r_address_p2;
+            //r_abus <= r_address_p2;
         end
     endcase
 end

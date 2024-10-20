@@ -53,10 +53,10 @@ always @(*) begin
             else                    NEXT = STATE_ON_DSACK;
         
         STATE_FINALIZE:
-            if (MUST_CONTINUE)      NEXT = STATE_CONTINUE;
+            if (MUST_CONTINUE)      NEXT = STATE_SETUP_BUS; //STATE_CONTINUE;
             else                    NEXT = STATE_WAIT;
                 
-        STATE_CONTINUE:             NEXT = STATE_SETUP_BUS;
+        //STATE_CONTINUE:             NEXT = STATE_SETUP_BUS;
 
         default:                    NEXT = STATE_WAIT;
     endcase
