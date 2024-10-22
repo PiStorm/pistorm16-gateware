@@ -350,36 +350,35 @@ reg pi_wr_a;
 reg pi_wr_b;
 
 reg pi_wr_falling;
+reg r_set_req_active;
 
-always @(negedge sys_clk) begin       
-    pi_wr_a <= PI_WR;
-    pi_wr_b <= pi_wr_a;
-    
-    if (pi_wr_b & ~pi_wr_a) begin
-        case (PI_A) // synthesis full_case
-            PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
-            PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
-            PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
-            PI_REG_ADDR_HI: begin
-                req_address[23:16] <= pi_data_in[7:0];
-                req_size <= pi_data_in[9:8];
-                req_read <= pi_data_in[10];
-                req_fc <= pi_data_in[13:11];
-                req_active <= 1'b1;
-            end
-            PI_REG_CONTROL: begin
-                if (pi_data_in[15]) begin
-                    pi_control <= pi_control | pi_data_in[14:0];                    
-                end else
-                    pi_control <= pi_control & ~pi_data_in[14:0];
-            end
-        endcase
-    end else begin
-        if (r_clear_req_active) req_active <= 'b0;
-    end
+always @(negedge PI_WR) begin  
+    r_set_req_active <= 1'b0;
+
+    case (PI_A) // synthesis full_case
+        PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
+        PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
+        PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
+        PI_REG_ADDR_HI: begin
+            req_address[23:16] <= pi_data_in[7:0];
+            req_size <= pi_data_in[9:8];
+            req_read <= pi_data_in[10];
+            req_fc <= pi_data_in[13:11];
+            r_set_req_active <= 1'b1;
+        end
+        PI_REG_CONTROL: begin
+            if (pi_data_in[15]) begin
+                pi_control <= pi_control | pi_data_in[14:0];                    
+            end else
+                pi_control <= pi_control & ~pi_data_in[14:0];
+        end
+    endcase
 end
 
-
+always @(posedge r_set_req_active or posedge r_clear_req_active) begin
+    if (r_clear_req_active) req_active <= 1'b0;
+    else if (r_set_req_active) req_active <= 1'b1;
+end
 
 reg [3:0] state = STATE_WAIT;
 wire [3:0] next_state;
@@ -416,7 +415,7 @@ always @(posedge mc_clk_latch) begin
 end
 
 // Main state machine
-always @(posedge sys_clk) begin
+always @(posedge sys_clk) begin // synthesis full_case
 
     if (!req_active) r_clear_req_active <= 1'b0;
 
@@ -429,9 +428,6 @@ always @(posedge sys_clk) begin
             r_dbus_drive <= 1'b0;
             r_vma_drive <= 1'b0;
             r_fc_drive <= 1'b0;
-            //r_as_ds_clear <= 1'b1;
-            //r_rw_clear <= 1'b1;
-            //r_control_drive <= 1'b0;
         end
                
         STATE_ACTIVATE:
@@ -513,18 +509,8 @@ always @(posedge sys_clk) begin
         begin
             r_as_ds_clear <= 1'b0;
             r_rw_clear <= 1'b0;
-            //r_abus_drive <= 1'b0;
-            //r_dbus_drive <= 1'b0;
-            //r_vma_drive <= 1'b0;
-            //r_fc_drive <= 1'b0;
-            //r_control_drive <= high_word;
             high_word <= 'b0;
             r_abus <= r_address_p2;
-        end
-        
-        STATE_CONTINUE:
-        begin
-            //r_abus <= r_address_p2;
         end
     endcase
 end
