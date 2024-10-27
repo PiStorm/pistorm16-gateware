@@ -125,12 +125,15 @@ reg [2:0] ipl;
 
 //always @(posedge sys_clk) begin
 //    if (mc_clk_falling) begin
-always @(posedge mc_clk_falling) begin
+always @(negedge CLK_7M) begin
         ipl_sync[0] <= ~IPL;
         ipl_sync[1] <= ipl_sync[0];
 
         if (ipl_sync[0] == ipl_sync[1])
             ipl <= ipl_sync[0];
+            
+            reset_sync <= nRESET_IN;
+        is_bm <= nBG_IN;
 //    end
 end
 
@@ -139,19 +142,19 @@ end
 (* async_reg = "true" *) reg halt_sync;
 (* async_reg = "true" *) reg dtack_sync;
 (* async_reg = "true" *) reg berr_n_sync;
-(* async_reg = "true" *) reg [15:0] din_sync[0:1];
+//(* async_reg = "true" *) reg [15:0] din_sync[0:1];
 
 always @(posedge sys_clk) begin
     dtack_sync <= nDTACK;
     berr_n_sync <= nBERR;
     halt_sync <= nHALT_IN;
-    din_sync[1] <= din_sync[0];
-    din_sync[0] <= D_IN;
-
+//    din_sync[1] <= din_sync[0];
+//    din_sync[0] <= D_IN;
+/*
     if (mc_clk_falling) begin
         reset_sync <= nRESET_IN;
         is_bm <= nBG_IN;
-    end
+    end*/
 end
 
 // Wire IPL line as inputs from 68k bus to PI
@@ -219,7 +222,7 @@ reg [14:0] pi_control = 15'b00000000000000;
 wire r_br_drive = pi_control[0];
 wire r_reset_drive = pi_control[1];
 wire r_halt_drive = pi_control[2];
-wire [7:0] r_dtack_delay = {1'b0, pi_control[14:8]};
+wire [7:0] r_dtack_delay = {2'b00, pi_control[13:8]};
 
 reg r_bg_drive;
 reg r_as_drive;
@@ -281,10 +284,20 @@ FFLatchNPR RW(
     .RESET(r_rw_clear)
 );
 
+/*
+wire enable_dtack_sampling;
+reg r_enter_s4;
+
+FFLatchPR S4(
+    .OUT(enable_dtack_sampling),
+    .SET(r_enter_s4),
+    .CLK(CLK_7M),
+    .RESET(r_rw_clear)
+);
+*/
 wire mc_clk_falling;
 wire mc_clk_rising;
 wire mc_clk_latch;
-wire mc_clk_latch_write;
 
 /*  Frequency   DTACK_DELAY   DTACK_PROBED
      120 MHz        15
@@ -292,15 +305,14 @@ wire mc_clk_latch_write;
      143 MHz        18
      145 MHz        20             16
 */
-ClockSync /*#(.DTACK_DELAY(16))*/ CLKSync (
+ClockSync CLKSync (
     .SYSCLK(sys_clk),
     .DTACK(nDTACK),
     .MCCLK(CLK_7M),
     .DTACK_DELAY(r_dtack_delay),
     .MCCLK_FALLING(mc_clk_falling),
     .MCCLK_RISING(mc_clk_rising),
-    .DTACK_LATCH(mc_clk_latch),
-    .DTACK_LATCH_WRITE(mc_clk_latch_write)
+    .DTACK_LATCH(mc_clk_latch)
 );
 
 localparam [3:0] FW_MAJOR = 4'd1;
@@ -352,15 +364,19 @@ reg pi_wr_b;
 reg pi_wr_falling;
 reg r_set_req_active;
 
+reg [31:0] req_data_write_tmp;
+reg [15:0] req_address_tmp;
+
 always @(negedge PI_WR) begin  
     r_set_req_active <= 1'b0;
 
     case (PI_A) // synthesis full_case
-        PI_REG_DATA_LO: req_data_write[15:0] <= pi_data_in;
-        PI_REG_DATA_HI: req_data_write[31:16] <= pi_data_in;
-        PI_REG_ADDR_LO: req_address[15:0] <= pi_data_in;
+        PI_REG_DATA_LO: req_data_write_tmp[15:0] <= pi_data_in;
+        PI_REG_DATA_HI: req_data_write_tmp[31:16] <= pi_data_in;
+        PI_REG_ADDR_LO: req_address_tmp[15:0] <= pi_data_in;
         PI_REG_ADDR_HI: begin
-            req_address[23:16] <= pi_data_in[7:0];
+            req_address <= {pi_data_in[7:0], req_address_tmp};
+            req_data_write <= req_data_write_tmp;
             req_size <= pi_data_in[9:8];
             req_read <= pi_data_in[10];
             req_fc <= pi_data_in[13:11];
@@ -391,7 +407,7 @@ FSMComb fsmc(
     .LATCH(mc_clk_latch),
     .MUST_CONTINUE(r_must_continue),
     .MC_CLK_RISING(CLK_7M),
-    .AS_FEEDBACK(~nAS_OUT), // r_fb_as[1]),
+    .AS_FEEDBACK(~nAS_OUT),
     .CURRENT(state),
     .NEXT(next_state)
 );
@@ -471,6 +487,8 @@ always @(posedge sys_clk) begin // synthesis full_case
         begin
             r_as_drive <= 1'b0;
             
+            //r_enter_s4 <= 1'b1;
+            
             r_dbus_drive <= ~r_is_read;
             
             r_lds_drive <= ~r_is_read & (r_size_16bit | r_abus[0]);
@@ -485,10 +503,10 @@ always @(posedge sys_clk) begin // synthesis full_case
         
         STATE_LATCH:
         begin           
-            //req_data_read <= r_data_read;
             r_lds_drive <= 1'b0;
             r_uds_drive <= 1'b0;
             r_rw_drive <= 1'b0;
+            //r_enter_s4 <= 1'b0;
 
             if (!high_word) r_clear_req_active <= 1'b1;
         end

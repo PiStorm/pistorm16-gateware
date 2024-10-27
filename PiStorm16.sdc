@@ -13,7 +13,7 @@
 ################# 8.333 (120 MHz), 7.5188 (133 MHz), 7.1429 (140 MHz), 6.667 (150 MHz), 6.024 (166 MHz), 6.994 (143 MHz)
 #create_clock -period 6.896 SYS_PLL_CLKOUT0 145 MHz
 #create_clock -period 6.6667 SYS_PLL_CLKOUT0 150 MHz
-create_clock -period 5.5556 SYS_PLL_CLKOUT0
+create_clock -period 5.000 SYS_PLL_CLKOUT0
 
 # 68000 bus clock
 ####################
