@@ -17,6 +17,7 @@ module FSMComb(
     input wire MUST_CONTINUE,
     input wire MC_CLK_RISING,
     input wire AS_FEEDBACK,
+    input wire ENTER_S6,
     input wire [3:0] CURRENT,
     output reg [3:0] NEXT
 );
@@ -40,9 +41,13 @@ always @(*) begin
         STATE_DRIVE_DS:             NEXT = STATE_WAIT_DSACK;
         
         STATE_WAIT_DSACK: 
-            if (LATCH)              NEXT = STATE_LATCH;
+            if (ENTER_S6)           NEXT = STATE_WAIT_LATCH;
             else                    NEXT = STATE_WAIT_DSACK;
         
+        STATE_WAIT_LATCH:
+            if (LATCH)              NEXT = STATE_LATCH;
+            else                    NEXT = STATE_WAIT_LATCH;
+            
         STATE_LATCH:                NEXT = STATE_CLEAR_AS;
         
         STATE_CLEAR_AS:             NEXT = STATE_ON_DSACK;

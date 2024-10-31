@@ -6,6 +6,7 @@ localparam STATE_SETUP_BUS  = 4'b0011;
 localparam STATE_DRIVE_AS   = 4'b0010;
 localparam STATE_DRIVE_DS   = 4'b0110;
 localparam STATE_WAIT_DSACK = 4'b0111;
+localparam STATE_WAIT_LATCH = 4'b1000;
 localparam STATE_LATCH      = 4'b0101;
 localparam STATE_CLEAR_AS   = 4'b0100;
 localparam STATE_ON_DSACK   = 4'b1100;

@@ -284,9 +284,9 @@ FFLatchNPR RW(
     .RESET(r_rw_clear)
 );
 
-/*
 wire enable_dtack_sampling;
 reg r_enter_s4;
+wire w_nDTACK = (enable_dtack_sampling & CLK_7M) ? nDTACK : 1'b1;
 
 FFLatchPR S4(
     .OUT(enable_dtack_sampling),
@@ -294,7 +294,17 @@ FFLatchPR S4(
     .CLK(CLK_7M),
     .RESET(r_rw_clear)
 );
-*/
+
+wire dtack_timeout_active;
+reg r_enter_s6;
+
+FFLatchPR S6(
+    .OUT(dtack_timeout_active),
+    .SET(r_enter_s6),
+    .CLK(CLK_7M),
+    .RESET(r_rw_clear)
+);
+
 wire mc_clk_falling;
 wire mc_clk_rising;
 wire mc_clk_latch;
@@ -307,7 +317,7 @@ wire mc_clk_latch;
 */
 ClockSync CLKSync (
     .SYSCLK(sys_clk),
-    .DTACK(nDTACK),
+    .DTACK(~dtack_timeout_active),
     .MCCLK(CLK_7M),
     .DTACK_DELAY(r_dtack_delay),
     .MCCLK_FALLING(mc_clk_falling),
@@ -403,6 +413,7 @@ reg high_word;
 reg r_must_continue;
 
 FSMComb fsmc(
+    .ENTER_S6(dtack_timeout_active),
     .ACTIVATE(req_active & CLK_7M),
     .LATCH(mc_clk_latch),
     .MUST_CONTINUE(r_must_continue),
@@ -486,11 +497,9 @@ always @(posedge sys_clk) begin // synthesis full_case
         STATE_DRIVE_DS:
         begin
             r_as_drive <= 1'b0;
+            r_enter_s4 <= 1'b1;
             
-            //r_enter_s4 <= 1'b1;
-            
-            r_dbus_drive <= ~r_is_read;
-            
+            r_dbus_drive <= ~r_is_read;            
             r_lds_drive <= ~r_is_read & (r_size_16bit | r_abus[0]);
             r_uds_drive <= ~r_is_read & (r_size_16bit | ~r_abus[0]);
         end
@@ -498,7 +507,7 @@ always @(posedge sys_clk) begin // synthesis full_case
         // Wait for DSACK and latch data (if read)
         STATE_WAIT_DSACK:
         begin
-            // Everything done in combinatorial logic
+            if (!w_nDTACK) r_enter_s6 <= 1'b1;
         end
         
         STATE_LATCH:
@@ -506,7 +515,8 @@ always @(posedge sys_clk) begin // synthesis full_case
             r_lds_drive <= 1'b0;
             r_uds_drive <= 1'b0;
             r_rw_drive <= 1'b0;
-            //r_enter_s4 <= 1'b0;
+            r_enter_s4 <= 1'b0;
+            r_enter_s6 <= 1'b0;
 
             if (!high_word) r_clear_req_active <= 1'b1;
         end
